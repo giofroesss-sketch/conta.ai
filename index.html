@@ -14,6 +14,7 @@
 <link rel="icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
 :root{
   --bg:#F4F2FA;
@@ -423,6 +424,65 @@ h1.page-title{font-family:'Sora',sans-serif; font-size:26px; font-weight:700; le
 .ws-act.edit{background:var(--violet-soft); color:var(--violet-1);}
 .ws-act.del{background:var(--coral-soft); color:var(--coral);}
 
+/* ===== Login / Cadastro ===== */
+.auth-screen{
+  position:fixed; inset:0; background:linear-gradient(160deg, var(--violet-1), #4A1FB8);
+  display:flex; flex-direction:column; justify-content:center; padding:32px 26px;
+  z-index:200; color:white;
+}
+.auth-screen.hidden{display:none;}
+.auth-logo{font-family:'Sora',sans-serif; font-size:30px; font-weight:800; margin-bottom:6px;}
+.auth-sub{font-size:13.5px; opacity:.85; margin-bottom:32px;}
+.auth-field{margin-bottom:14px;}
+.auth-field label{font-size:12px; font-weight:600; opacity:.85; display:block; margin-bottom:6px;}
+.auth-field input{
+  width:100%; border:none; background:rgba(255,255,255,0.14); color:white; border-radius:14px;
+  padding:14px 16px; font-size:14.5px; font-family:inherit;
+}
+.auth-field input::placeholder{color:rgba(255,255,255,0.55);}
+.auth-field input:focus{outline:2px solid rgba(255,255,255,0.5);}
+.auth-btn{
+  width:100%; background:white; color:var(--violet-1); border:none; padding:15px 0; border-radius:16px;
+  font-weight:800; font-size:14.5px; cursor:pointer; font-family:inherit; margin-top:8px;
+}
+.auth-switch{text-align:center; margin-top:18px; font-size:13px; opacity:.9;}
+.auth-switch b{text-decoration:underline; cursor:pointer;}
+.auth-error{background:rgba(255,107,107,0.25); border-radius:10px; padding:10px 14px; font-size:12.5px; margin-bottom:14px; display:none;}
+.auth-loading{position:fixed; inset:0; background:rgba(20,12,45,0.6); display:none; align-items:center; justify-content:center; z-index:300; color:white; font-weight:700;}
+
+/* ===== Tema escuro ===== */
+body.theme-dark{
+  --bg:#161025;
+  --surface:#1F1833;
+  --ink:#F1EDFB;
+  --muted:#9A91B8;
+  --hairline:#2D2548;
+  --violet-soft:#2A2050;
+  --teal-soft:#143430;
+  --coral-soft:#3A2230;
+}
+body.theme-dark{ background:linear-gradient(180deg,#100B1C 0%, #1A1330 100%); }
+body.theme-dark .device{ box-shadow:0 40px 80px -20px rgba(0,0,0,0.6), 0 0 0 10px #0E0A1F; }
+body.theme-dark .statusbar{ color:var(--ink); }
+
+/* ===== Modo privacidade (oculta saldos) ===== */
+body.privacy-on .balance-amount,
+body.privacy-on .value,
+body.privacy-on .amt,
+body.privacy-on .ws-balance,
+body.privacy-on .bal,
+body.privacy-on .stat-box .amt,
+body.privacy-on .cat-detail-head .big{
+  filter: blur(7px);
+  transition: filter .2s ease;
+  user-select:none;
+}
+body.privacy-on .balance-amount:active,
+body.privacy-on .value:active,
+body.privacy-on .amt:active{
+  filter: blur(0);
+}
+
 /* ===== Compartilhar workspace ===== */
 .share-link-box{
   display:flex; align-items:center; gap:10px; background:var(--violet-soft); border-radius:14px; padding:14px 16px; margin:18px 0;
@@ -467,6 +527,32 @@ h1.page-title{font-family:'Sora',sans-serif; font-size:26px; font-weight:700; le
 </style>
 </head>
 <body>
+
+<div class="auth-loading" id="auth-loading">Carregando...</div>
+
+<div class="auth-screen" id="auth-screen">
+  <div class="auth-logo">Conta.ai</div>
+  <div class="auth-sub" id="auth-subtitle">Entre para acessar suas áreas financeiras.</div>
+  <div class="auth-error" id="auth-error"></div>
+
+  <div id="auth-name-field" class="auth-field" style="display:none;">
+    <label>Seu nome</label>
+    <input type="text" id="auth-name" placeholder="Como podemos te chamar?">
+  </div>
+  <div class="auth-field">
+    <label>E-mail</label>
+    <input type="email" id="auth-email" placeholder="seu@email.com">
+  </div>
+  <div class="auth-field">
+    <label>Senha</label>
+    <input type="password" id="auth-password" placeholder="••••••••">
+  </div>
+
+  <button class="auth-btn" id="auth-submit-btn" onclick="submitAuth()">Entrar</button>
+  <div class="auth-switch" id="auth-switch-text">
+    Não tem conta? <b onclick="toggleAuthMode()">Cadastre-se</b>
+  </div>
+</div>
 
 <div class="device">
   <div class="statusbar">
@@ -685,7 +771,7 @@ h1.page-title{font-family:'Sora',sans-serif; font-size:26px; font-weight:700; le
     </div>
 
     <div class="field" id="newws-budget-field"><label>Orçamento mensal (opcional)</label><input type="number" id="newws-budget" placeholder="0,00"></div>
-    <div class="field" id="newws-members-field" style="display:none;"><label>Membros (separados por vírgula)</label><input type="text" id="newws-members" placeholder="Ex: Você, Marina, Lucas"></div>
+    <p class="sub" id="newws-group-hint" style="display:none;">Depois de criar, você vai gerar um link de convite para adicionar pessoas reais (elas entram fazendo login).</p>
 
     <button class="btn-primary" onclick="createWorkspace()">Criar área</button>
   </div>
@@ -713,7 +799,7 @@ h1.page-title{font-family:'Sora',sans-serif; font-size:26px; font-weight:700; le
     <div class="icon-swatches" id="editws-icons"></div>
     <label style="font-size:12px; font-weight:600; color:var(--muted); display:block; margin-bottom:8px;">Cor</label>
     <div class="color-swatches" id="editws-colors"></div>
-    <div class="field" id="editws-members-field"><label>Membros (separados por vírgula)</label><input type="text" id="editws-members" placeholder="Ex: Você, Marina, Lucas"></div>
+    <div class="field" id="editws-members-field"><label>Membros</label><div id="editws-members-list" style="background:var(--surface); border-radius:var(--radius-sm); padding:6px 14px; box-shadow:var(--shadow);"></div></div>
     <button class="btn-secondary" id="editws-share-btn" style="display:none;" onclick="openShare(state.editWsId)">🔗 Compartilhar esta área</button>
     <button class="btn-primary" onclick="saveEditWs()">Salvar alterações</button>
     <button class="btn-del" style="width:100%; margin-top:14px;" onclick="confirmDeleteWs()">🗑️ Excluir esta área</button>
@@ -748,9 +834,10 @@ h1.page-title{font-family:'Sora',sans-serif; font-size:26px; font-weight:700; le
     <button class="btn-secondary" onclick="goTo('newws')">+ Criar nova área</button>
 
     <div class="section-head"><h3>Preferências</h3></div>
-    <div class="list-row"><div class="chip-icon" style="background:var(--violet-soft)">🎨</div><div class="meta"><div class="title">Tema</div><div class="desc">Claro · Roxo</div></div></div>
-    <div class="list-row"><div class="chip-icon" style="background:var(--teal-soft)">🙈</div><div class="meta"><div class="title">Ocultar saldos</div><div class="desc">Modo privacidade</div></div></div>
-    <div class="list-row"><div class="chip-icon" style="background:var(--coral-soft)">📤</div><div class="meta"><div class="title">Exportar dados</div><div class="desc">CSV ou PDF</div></div></div>
+    <div class="list-row" onclick="toggleTheme()"><div class="chip-icon" style="background:var(--violet-soft)">🎨</div><div class="meta"><div class="title">Tema</div><div class="desc" id="theme-desc">Claro · Roxo</div></div></div>
+    <div class="list-row" onclick="togglePrivacy()"><div class="chip-icon" style="background:var(--teal-soft)">🙈</div><div class="meta"><div class="title">Ocultar saldos</div><div class="desc" id="privacy-desc">Modo privacidade desativado</div></div></div>
+    <div class="list-row" onclick="exportDataCSV()"><div class="chip-icon" style="background:var(--coral-soft)">📤</div><div class="meta"><div class="title">Exportar dados (CSV)</div><div class="desc">Baixa todas as áreas em uma planilha</div></div></div>
+    <div class="list-row" onclick="window.print()"><div class="chip-icon" style="background:var(--coral-soft)">🖨️</div><div class="meta"><div class="title">Exportar tela atual (PDF)</div><div class="desc">Usa a função de imprimir do navegador</div></div></div>
   </div>
 
   <!-- ============ BOTTOM NAV ============ -->
@@ -800,20 +887,29 @@ h1.page-title{font-family:'Sora',sans-serif; font-size:26px; font-weight:700; le
 
 <script>
 /* ============================================================
-   ESTADO (em memória — simula persistência para o protótipo)
+   SUPABASE
    ============================================================ */
+const SUPABASE_URL = 'https://akdhxzomafctbuvbxnbf.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_Etx1gJPquIiuH5qD7_r8kw_1PPlnHfn';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
 const COLORS = ['#6C3CE9','#16A893','#FF6B6B','#E7A532','#3C7CE9','#C13CE9'];
 const ICONS = ['💼','✈️','🏠','🎓','💍','🏖️','🚗','🐶','🎉','🛠️'];
+const MONTH_NAMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+let currentUser = null;
+let myProfileName = '';
+let authMode = 'login';
+let pendingInviteCode = null;
 
 let state = {
-  activeWsId: 'pessoal',
+  activeWsId: null,
   txType: 'expense',
   splitType: 'equal',
   selectedCategory: null,
   selectedPayer: null,
   selectedResponsavel: null,
-  selectedMethod: null,
-  selectedStatus: 'pago',
+  selectedStatus: 'Pago',
   selectedRecurring: '',
   newWsType: 'individual',
   newWsIcon: ICONS[0],
@@ -821,98 +917,23 @@ let state = {
   newMethodIcon: '💳',
   newMethodColor: COLORS[0],
   editWsId: null, editWsIcon: ICONS[0], editWsColor: COLORS[0],
-  detail: null, // {wsId, kind:'tx'|'expense', id}
-  calendarMonth: 5, calendarYear: 2026, // 5 = Junho (0-indexed)
-
+  editingTxId: null, editingExpenseId: null,
+  detail: null,
+  calendarMonth: new Date().getMonth(),
+  calendarYear: new Date().getFullYear(),
   statusOptions: [
-    {id:'pago', name:'Pago', color:'#16A893'},
-    {id:'pendente', name:'Pendente', color:'#E7A532'},
-    {id:'aguardando', name:'Aguardando', color:'#3C7CE9'},
-    {id:'a_pagar', name:'A pagar', color:'#FF6B6B'},
-    {id:'cancelado', name:'Cancelado', color:'#766F8C'},
+    {name:'Pago', color:'#16A893'},
+    {name:'Pendente', color:'#E7A532'},
+    {name:'Aguardando', color:'#3C7CE9'},
+    {name:'A pagar', color:'#FF6B6B'},
+    {name:'Cancelado', color:'#766F8C'},
   ],
-
-  categories: [
-    {id:'moradia', name:'Moradia', icon:'🏠', color:'#6C3CE9'},
-    {id:'contafixa', name:'Conta fixa', icon:'🧾', color:'#3C7CE9'},
-    {id:'assinaturas', name:'Assinaturas', icon:'🔁', color:'#C13CE9'},
-    {id:'alimentacao', name:'Alimentação', icon:'🍔', color:'#FF6B6B'},
-    {id:'delivery', name:'Delivery', icon:'🛵', color:'#E7A532'},
-    {id:'transporte', name:'Transporte', icon:'🚗', color:'#3C7CE9'},
-    {id:'lazer', name:'Lazer', icon:'🎮', color:'#E7A532'},
-    {id:'saude', name:'Saúde', icon:'💊', color:'#16A893'},
-    {id:'compras', name:'Compras', icon:'🛍️', color:'#C13CE9'},
-    {id:'educacao', name:'Educação', icon:'📚', color:'#3C7CE9'},
-    {id:'outros', name:'Outros', icon:'•••', color:'#766F8C'},
-  ],
-
-  workspaces: {
-    pessoal: {
-      id:'pessoal', name:'Pessoal', type:'individual', icon:'💼', color:'#6C3CE9', currency:'R$',
-      balance: 4820.50,
-      monthIncome: 8200, monthExpense: 3450,
-      budgetByCategory: {moradia:{limit:1500, spent:1450}, alimentacao:{limit:900, spent:740}, transporte:{limit:400, spent:310}, lazer:{limit:300, spent:280}},
-      bars: [{m:'Jan',income:30,expense:18},{m:'Fev',income:34,expense:22},{m:'Mar',income:28,expense:25},{m:'Abr',income:36,expense:19},{m:'Mai',income:32,expense:24},{m:'Jun',income:38,expense:20}],
-      fixedIncome: {name:'Salário', day:20, amount:8200, confirmed:false},
-      paymentMethods: [
-        {id:'pm1', name:'Cartão Nubank', icon:'💳', color:'#820AD1'},
-        {id:'pm2', name:'Cartão Itaú', icon:'💳', color:'#1B1530'},
-        {id:'pm3', name:'Pix', icon:'⚡', color:'#16A893'},
-        {id:'pm4', name:'Dinheiro', icon:'💵', color:'#E7A532'},
-      ],
-      transactions: [
-        {id:'t1', desc:'Salário (mês anterior)', cat:'outros', amount:8200, type:'income', date:'01/06', method:'pm3', note:'', status:'pago', recurring:'fixa', linkedToIncome:false},
-        {id:'t2', desc:'Aluguel', cat:'moradia', amount:-1450, type:'expense', date:'25/06', method:'pm3', note:'Aguardando confirmação do salário deste mês', status:'aguardando', recurring:'fixa', linkedToIncome:true},
-        {id:'t3', desc:'Supermercado', cat:'alimentacao', amount:-380, type:'expense', date:'08/06', method:'pm1', note:'', status:'pago', recurring:'variavel', linkedToIncome:false},
-        {id:'t6', desc:'Internet + streaming', cat:'assinaturas', amount:-160, type:'expense', date:'22/06', method:'pm2', note:'', status:'a_pagar', recurring:'fixa', linkedToIncome:false},
-        {id:'t7', desc:'iFood', cat:'delivery', amount:-65, type:'expense', date:'18/06', method:'pm1', note:'', status:'pago', recurring:'variavel', linkedToIncome:false},
-      ],
-    },
-    casa: {
-      id:'casa', name:'Casa', type:'individual', icon:'🏠', color:'#16A893', currency:'R$',
-      balance: 1240.00,
-      monthIncome: 1800, monthExpense: 1320,
-      budgetByCategory: {moradia:{limit:800, spent:760}, alimentacao:{limit:500, spent:420}, outros:{limit:200, spent:140}},
-      bars: [{m:'Jan',income:18,expense:14},{m:'Fev',income:18,expense:15},{m:'Mar',income:18,expense:13},{m:'Abr',income:18,expense:16},{m:'Mai',income:18,expense:14},{m:'Jun',income:18,expense:13}],
-      fixedIncome: null,
-      paymentMethods: [
-        {id:'pm5', name:'Cartão conjunto', icon:'💳', color:'#CC092F'},
-        {id:'pm6', name:'Pix', icon:'⚡', color:'#16A893'},
-      ],
-      transactions: [
-        {id:'t4', desc:'Condomínio', cat:'contafixa', amount:-650, type:'expense', date:'03/06', method:'pm6', note:'', status:'pago', recurring:'fixa', linkedToIncome:false},
-        {id:'t5', desc:'Conta de luz', cat:'contafixa', amount:-180, type:'expense', date:'06/06', method:'pm5', note:'', status:'pago', recurring:'fixa', linkedToIncome:false},
-      ],
-    },
-    viagem: {
-      id:'viagem', name:'Viagem Japão', type:'group', icon:'✈️', color:'#E7A532', currency:'R$',
-      members: [
-        {id:'you', name:'Você', color:'#6C3CE9'},
-        {id:'marina', name:'Marina', color:'#FF6B6B'},
-        {id:'lucas', name:'Lucas', color:'#16A893'},
-        {id:'bia', name:'Bia', color:'#3C7CE9'},
-      ],
-      expenses: [
-        {id:'e1', desc:'Passagens aéreas', amount:5200, payer:'you', responsavel:'you', date:'02/06', split:{you:1300, marina:1300, lucas:1300, bia:1300}, status:'pago', note:''},
-        {id:'e2', desc:'Hotel Tóquio (5 noites)', amount:3600, payer:'marina', responsavel:'marina', date:'10/06', split:{you:900, marina:900, lucas:900, bia:900}, status:'pago', note:''},
-        {id:'e3', desc:'Jantar Shibuya', amount:480, payer:'lucas', responsavel:'lucas', date:'14/06', split:{you:120, marina:120, lucas:120, bia:120}, status:'pendente', note:''},
-      ],
-    },
-    republica: {
-      id:'republica', name:'República', type:'group', icon:'🏠', color:'#3C7CE9', currency:'R$',
-      members: [
-        {id:'you', name:'Você', color:'#6C3CE9'},
-        {id:'pedro', name:'Pedro', color:'#E7A532'},
-        {id:'ana', name:'Ana', color:'#C13CE9'},
-      ],
-      expenses: [
-        {id:'e4', desc:'Conta de internet', amount:150, payer:'you', responsavel:'you', date:'05/06', split:{you:50, pedro:50, ana:50}, status:'pago', note:''},
-        {id:'e5', desc:'Mercado da semana', amount:280, payer:'pedro', responsavel:'ana', date:'09/06', split:{you:93.3, pedro:93.3, ana:93.4}, status:'a_pagar', note:''},
-      ],
-    },
-  },
+  workspaces: {},
 };
 
+/* ============================================================
+   HELPERS DE FORMATAÇÃO
+   ============================================================ */
 function fmt(v){
   const n = Number(v)||0;
   const sign = n < 0 ? '-' : '';
@@ -922,23 +943,361 @@ function fmtShort(v){
   const n = Number(v)||0;
   return 'R$ ' + n.toLocaleString('pt-BR',{maximumFractionDigits:0});
 }
-function statusOf(id){
-  return state.statusOptions.find(s=>s.id===id) || state.statusOptions[0];
+function statusOf(name){
+  return state.statusOptions.find(s=>s.name===name) || {name: name||'Pago', color:'#766F8C'};
 }
-function statusTagHTML(statusId){
-  const s = statusOf(statusId);
+function statusTagHTML(name){
+  const s = statusOf(name);
   return `<span class="status-tag" style="background:${s.color}1E; color:${s.color}"><span class="sdot" style="background:${s.color}"></span>${s.name}</span>`;
 }
 function recurringTagHTML(rec){
   if(!rec) return '';
   return `<span class="tag-pill">${rec==='fixa'?'Fixa':'Variável'}</span>`;
 }
+function shade(hex){
+  const c = hex.replace('#','');
+  const num = parseInt(c,16);
+  let r = (num>>16) + 35, g = ((num>>8)&0xff)+35, b=(num&0xff)+35;
+  r=Math.min(255,r); g=Math.min(255,g); b=Math.min(255,b);
+  return '#' + ((1<<24)+(r<<16)+(g<<8)+b).toString(16).slice(1);
+}
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2400);
+}
+function showLoading(on){
+  document.getElementById('auth-loading').style.display = on ? 'flex' : 'none';
+}
+
+/* ============================================================
+   AUTENTICAÇÃO
+   ============================================================ */
+function showAuthError(msg){
+  const el = document.getElementById('auth-error');
+  el.textContent = msg; el.style.display = 'block';
+}
+function hideAuthError(){ document.getElementById('auth-error').style.display = 'none'; }
+
+function toggleAuthMode(){
+  authMode = authMode === 'login' ? 'signup' : 'login';
+  document.getElementById('auth-name-field').style.display = authMode === 'signup' ? 'block' : 'none';
+  document.getElementById('auth-submit-btn').textContent = authMode === 'signup' ? 'Criar conta' : 'Entrar';
+  document.getElementById('auth-subtitle').textContent = authMode === 'signup' ? 'Crie sua conta para começar.' : 'Entre para acessar suas áreas financeiras.';
+  document.getElementById('auth-switch-text').innerHTML = authMode === 'signup'
+    ? 'Já tem conta? <b onclick="toggleAuthMode()">Entrar</b>'
+    : 'Não tem conta? <b onclick="toggleAuthMode()">Cadastre-se</b>';
+  hideAuthError();
+}
+
+function translateAuthError(msg){
+  if(/Invalid login credentials/i.test(msg)) return 'E-mail ou senha incorretos.';
+  if(/already registered|already exists/i.test(msg)) return 'Esse e-mail já tem conta — tente entrar.';
+  if(/Password should be|at least 6/i.test(msg)) return 'A senha precisa ter pelo menos 6 caracteres.';
+  return msg;
+}
+
+async function submitAuth(){
+  hideAuthError();
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  if(!email || !password){ showAuthError('Preencha e-mail e senha.'); return; }
+  showLoading(true);
+  try{
+    if(authMode === 'signup'){
+      const name = document.getElementById('auth-name').value.trim() || email.split('@')[0];
+      const { data, error } = await sb.auth.signUp({ email, password, options:{ data:{ name } } });
+      if(error) throw error;
+      if(data.user && !data.session){
+        showLoading(false);
+        showAuthError('Conta criada! Verifique seu e-mail para confirmar o cadastro e depois faça login.');
+        toggleAuthMode();
+        return;
+      }
+    } else {
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      if(error) throw error;
+    }
+    await onAuthReady();
+  } catch(err){
+    showLoading(false);
+    showAuthError(translateAuthError(err.message || String(err)));
+  }
+}
+
+async function signOut(){
+  await sb.auth.signOut();
+  location.reload();
+}
+
+async function onAuthReady(){
+  const { data:{ user } } = await sb.auth.getUser();
+  currentUser = user;
+  if(!currentUser){ showLoading(false); return; }
+
+  let { data: profile } = await sb.from('profiles').select('name').eq('id', currentUser.id).single();
+  myProfileName = (profile && profile.name) || currentUser.email.split('@')[0];
+
+  document.getElementById('auth-screen').classList.add('hidden');
+
+  let justJoinedId = null;
+  if(pendingInviteCode){
+    justJoinedId = await joinByInviteCode(pendingInviteCode);
+    pendingInviteCode = null;
+    const url = new URL(location.href);
+    url.searchParams.delete('invite');
+    history.replaceState({}, '', url);
+  }
+
+  await loadMyWorkspaces();
+
+  if(justJoinedId && state.workspaces[justJoinedId]){
+    state.activeWsId = justJoinedId;
+    goTo('dashboard');
+  }
+  applyLocalPrefs();
+  showLoading(false);
+}
+
+async function initApp(){
+  showLoading(true);
+  const params = new URLSearchParams(location.search);
+  const invite = params.get('invite');
+  if(invite) pendingInviteCode = invite;
+
+  const { data:{ session } } = await sb.auth.getSession();
+  if(session){
+    await onAuthReady();
+  } else {
+    showLoading(false);
+  }
+  sb.auth.onAuthStateChange((event)=>{
+    if(event === 'SIGNED_OUT'){ location.reload(); }
+  });
+}
+
+/* ============================================================
+   WORKSPACES — CARREGAR / CRIAR / EDITAR / EXCLUIR
+   ============================================================ */
+async function loadMyWorkspaces(){
+  const { data: memberships, error } = await sb.from('workspace_members')
+    .select('workspace_id, display_name, color, role, workspaces(*)')
+    .eq('user_id', currentUser.id);
+  if(error){ console.error(error); showToast('Erro ao carregar áreas'); return; }
+
+  const next = {};
+  (memberships||[]).forEach(m=>{
+    const ws = m.workspaces;
+    if(!ws) return;
+    next[ws.id] = state.workspaces[ws.id] || {
+      members:[], categories:[], paymentMethods:[], transactions:[], expenses:[],
+    };
+    Object.assign(next[ws.id], {
+      id: ws.id, name: ws.name, icon: ws.icon, color: ws.color,
+      currency: ws.currency, type: ws.type, owner_id: ws.owner_id,
+    });
+  });
+  state.workspaces = next;
+
+  const ids = Object.keys(state.workspaces);
+  await Promise.all(ids.map(id=>ensureWorkspaceLoaded(id)));
+
+  if(ids.length === 0){
+    state.activeWsId = null;
+  } else if(!state.activeWsId || !state.workspaces[state.activeWsId]){
+    state.activeWsId = ids[0];
+  }
+  goTo('workspaces');
+}
+
+async function ensureWorkspaceLoaded(wsId){
+  const ws = state.workspaces[wsId];
+  if(!ws) return;
+
+  const { data: members } = await sb.from('workspace_members').select('user_id, display_name, color, role').eq('workspace_id', wsId);
+  ws.members = (members||[]).map(m=>({
+    id: m.user_id,
+    name: m.user_id===currentUser.id ? 'Você' : (m.display_name || 'Membro'),
+    color: m.color || '#6C3CE9',
+    role: m.role,
+  }));
+
+  const { data: cats } = await sb.from('categories').select('*').eq('workspace_id', wsId).order('name');
+  ws.categories = cats || [];
+
+  const { data: methods } = await sb.from('payment_methods').select('*').eq('workspace_id', wsId).order('name');
+  ws.paymentMethods = methods || [];
+
+  if(ws.type === 'individual'){
+    const { data: txs } = await sb.from('transactions').select('*').eq('workspace_id', wsId).order('occurred_on', {ascending:false});
+    ws.transactions = (txs||[]).map(t=>({
+      id:t.id, desc:t.description, cat:t.category_id, amount:Number(t.amount), type:t.type,
+      date:t.occurred_on, method:t.method_id, note:t.note||'', status:t.status||'Pago', recurring:t.recurring||'',
+    }));
+  } else {
+    const { data: exps } = await sb.from('group_expenses').select('*').eq('workspace_id', wsId).order('occurred_on', {ascending:false});
+    ws.expenses = (exps||[]).map(e=>({
+      id:e.id, desc:e.description, amount:Number(e.amount), payer:e.payer_id, responsavel:e.responsavel_id,
+      date:e.occurred_on, split:e.split||{}, status:e.status||'Pago', note:e.note||'',
+    }));
+  }
+}
+
+function selectWorkspace(id){
+  state.activeWsId = id;
+  goTo('dashboard');
+}
+
+async function createWorkspace(){
+  const name = document.getElementById('newws-name').value.trim();
+  if(!name){ showToast('Dê um nome para a área'); return; }
+  const currency = document.getElementById('newws-currency').value;
+  showLoading(true);
+  const { data: ws, error } = await sb.from('workspaces').insert({
+    name, type: state.newWsType, icon: state.newWsIcon, color: state.newWsColor, currency, owner_id: currentUser.id
+  }).select().single();
+  if(error){ showLoading(false); showToast('Erro: '+error.message); return; }
+
+  await sb.from('workspace_members').insert({
+    workspace_id: ws.id, user_id: currentUser.id, display_name: myProfileName, color: state.newWsColor, role:'owner'
+  });
+
+  if(state.newWsType === 'individual'){
+    const defaultCats = [
+      {name:'Moradia', icon:'🏠', color:'#6C3CE9'},
+      {name:'Alimentação', icon:'🍔', color:'#FF6B6B'},
+      {name:'Transporte', icon:'🚗', color:'#3C7CE9'},
+      {name:'Lazer', icon:'🎮', color:'#E7A532'},
+      {name:'Saúde', icon:'💊', color:'#16A893'},
+      {name:'Outros', icon:'•••', color:'#766F8C'},
+    ];
+    await sb.from('categories').insert(defaultCats.map(c=>({...c, workspace_id: ws.id})));
+    const defaultMethods = [
+      {name:'Pix', icon:'⚡', color:'#16A893'},
+      {name:'Dinheiro', icon:'💵', color:'#E7A532'},
+    ];
+    await sb.from('payment_methods').insert(defaultMethods.map(m=>({...m, workspace_id: ws.id})));
+  }
+
+  state.workspaces[ws.id] = { id:ws.id, name:ws.name, icon:ws.icon, color:ws.color, currency:ws.currency, type:ws.type, owner_id:ws.owner_id, members:[], categories:[], paymentMethods:[], transactions:[], expenses:[] };
+  await ensureWorkspaceLoaded(ws.id);
+  state.activeWsId = ws.id;
+  showLoading(false);
+  showToast('Área "'+name+'" criada ✓');
+  goTo('dashboard');
+}
+
+function openEditWs(id){
+  const ws = state.workspaces[id];
+  state.editWsId = id;
+  state.editWsIcon = ws.icon;
+  state.editWsColor = ws.color;
+  document.getElementById('editws-name').value = ws.name;
+  document.getElementById('editws-members-field').style.display = ws.type==='group' ? 'block' : 'none';
+  document.getElementById('editws-share-btn').style.display = ws.type==='group' ? 'block' : 'none';
+  if(ws.type==='group'){
+    document.getElementById('editws-members-list').innerHTML = ws.members.map(m=>`
+      <div class="member-mini">
+        <div class="avatar" style="background:${m.color}">${m.name[0]}</div>
+        <div class="name">${m.name}</div>
+        <div class="role">${m.id===currentUser.id ? 'Você' : (m.role==='owner'?'Dono':'Membro')}</div>
+      </div>`).join('') || '<p class="sub">Nenhum outro membro ainda.</p>';
+  }
+  renderEditIconSwatches();
+  renderEditColorSwatches();
+  goTo('editws');
+}
+function renderEditIconSwatches(){
+  const el = document.getElementById('editws-icons');
+  el.innerHTML = '';
+  ICONS.forEach(ic=>{
+    const div = document.createElement('div');
+    div.className = 'icon-swatch' + (state.editWsIcon===ic?' selected':'');
+    div.textContent = ic;
+    div.onclick = ()=>{ state.editWsIcon = ic; renderEditIconSwatches(); };
+    el.appendChild(div);
+  });
+}
+function renderEditColorSwatches(){
+  const el = document.getElementById('editws-colors');
+  el.innerHTML = '';
+  COLORS.forEach(c=>{
+    const div = document.createElement('div');
+    div.className = 'swatch' + (state.editWsColor===c?' selected':'');
+    div.style.background = c;
+    div.onclick = ()=>{ state.editWsColor = c; renderEditColorSwatches(); };
+    el.appendChild(div);
+  });
+}
+async function saveEditWs(){
+  const ws = state.workspaces[state.editWsId];
+  const name = document.getElementById('editws-name').value.trim();
+  if(!name){ showToast('Dê um nome para a área'); return; }
+  const { error } = await sb.from('workspaces').update({name, icon:state.editWsIcon, color:state.editWsColor}).eq('id', ws.id);
+  if(error){ showToast('Erro: '+error.message); return; }
+  ws.name = name; ws.icon = state.editWsIcon; ws.color = state.editWsColor;
+  showToast('Área atualizada ✓');
+  goTo('settings');
+}
+async function confirmDeleteWs(id){
+  const wsId = id || state.editWsId;
+  const ws = state.workspaces[wsId];
+  if(Object.keys(state.workspaces).length <= 1){ showToast('Você precisa ter pelo menos uma área'); return; }
+  if(!confirm(`Excluir a área "${ws.name}"? Essa ação não pode ser desfeita.`)) return;
+  const { error } = await sb.from('workspaces').delete().eq('id', wsId);
+  if(error){ showToast('Só o dono da área pode excluí-la, ou: '+error.message); return; }
+  delete state.workspaces[wsId];
+  if(state.activeWsId === wsId) state.activeWsId = Object.keys(state.workspaces)[0];
+  showToast('Área excluída');
+  goTo('settings');
+}
+
+/* ============================================================
+   COMPARTILHAR / CONVITE
+   ============================================================ */
+async function openShare(wsId){
+  const ws = state.workspaces[wsId];
+  if(!ws || ws.type !== 'group'){ showToast('Compartilhamento disponível só em áreas compartilhadas'); return; }
+  const code = Math.random().toString(36).slice(2,10);
+  const { error } = await sb.from('invites').insert({workspace_id: wsId, code});
+  if(error){ showToast('Erro ao gerar convite: '+error.message); return; }
+  const link = `${location.origin}${location.pathname}?invite=${code}`;
+  document.getElementById('share-link-text').textContent = link;
+  document.getElementById('share-members-list').innerHTML = ws.members.map(m=>`
+    <div class="member-mini">
+      <div class="avatar" style="background:${m.color}">${m.name[0]}</div>
+      <div class="name">${m.name}</div>
+      <div class="role">${m.id===currentUser.id ? 'Você' : (m.role==='owner'?'Dono':'Membro')}</div>
+    </div>`).join('');
+  goTo('share');
+}
+function copyShareLink(){
+  const text = document.getElementById('share-link-text').textContent;
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(()=>showToast('Link copiado ✓')).catch(()=>showToast('Não foi possível copiar'));
+  } else {
+    showToast('Link copiado ✓');
+  }
+}
+async function joinByInviteCode(code){
+  const { data: invite, error } = await sb.from('invites').select('workspace_id').eq('code', code).maybeSingle();
+  if(error || !invite){ showToast('Convite inválido ou expirado'); return null; }
+  const { data: existing } = await sb.from('workspace_members').select('id').eq('workspace_id', invite.workspace_id).eq('user_id', currentUser.id).maybeSingle();
+  if(existing){ return invite.workspace_id; }
+  const color = COLORS[Math.floor(Math.random()*COLORS.length)];
+  const { error: insErr } = await sb.from('workspace_members').insert({
+    workspace_id: invite.workspace_id, user_id: currentUser.id, display_name: myProfileName, color, role:'member'
+  });
+  if(insErr){ showToast('Erro ao entrar na área: '+insErr.message); return null; }
+  showToast('Você entrou na área compartilhada ✓');
+  return invite.workspace_id;
+}
 
 /* ============================================================
    NAVEGAÇÃO
    ============================================================ */
 function goTo(screen){
-  saveLocal();
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById('screen-'+screen).classList.add('active');
   document.querySelectorAll('.navitem').forEach(n=>n.classList.remove('active'));
@@ -956,11 +1315,6 @@ function goTo(screen){
   if(screen==='calendar') renderCalendar();
 }
 
-function selectWorkspace(id){
-  state.activeWsId = id;
-  goTo('dashboard');
-}
-
 function openAdd(){
   const ws = state.workspaces[state.activeWsId];
   state.editingTxId = null;
@@ -975,33 +1329,74 @@ function openAdd(){
     goTo('add');
   }
 }
-
 function openSettle(){
   renderSettle();
   goTo('settle');
 }
 
-function showToast(msg){
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  setTimeout(()=>t.classList.remove('show'), 2200);
+/* ============================================================
+   CÁLCULOS DERIVADOS (lidos do cache local já carregado do banco)
+   ============================================================ */
+function wsBalance(ws){ return ws.transactions.reduce((s,t)=>s+t.amount, 0); }
+function categorySpend(ws, monthOnly){
+  const now = new Date(); const ym = now.toISOString().slice(0,7);
+  const totals = {};
+  ws.transactions.filter(t=>t.amount<0 && (!monthOnly || (t.date && t.date.slice(0,7)===ym))).forEach(t=>{
+    totals[t.cat] = (totals[t.cat]||0) + Math.abs(t.amount);
+  });
+  return totals;
+}
+function computeBars(ws){
+  const months = [];
+  const now = new Date();
+  for(let i=5;i>=0;i--){
+    const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    months.push({ym:d.toISOString().slice(0,7), label:MONTH_NAMES[d.getMonth()].slice(0,3)});
+  }
+  return months.map(m=>{
+    let income=0, expense=0;
+    ws.transactions.forEach(t=>{
+      if(t.date && t.date.slice(0,7)===m.ym){
+        if(t.amount>0) income+=t.amount; else expense+=Math.abs(t.amount);
+      }
+    });
+    return {m:m.label, income, expense};
+  });
+}
+function groupNetForYou(ws){
+  let net = 0;
+  ws.expenses.forEach(e=>{
+    const yourShare = e.split[currentUser.id] || 0;
+    if(e.payer === currentUser.id){ net += (e.amount - yourShare); }
+    else { net -= yourShare; }
+  });
+  return net;
+}
+function memberNet(ws, memberId){
+  let net = 0;
+  ws.expenses.forEach(e=>{
+    const theirShare = e.split[memberId] || 0;
+    const yourShare = e.split[currentUser.id] || 0;
+    if(e.payer === currentUser.id && memberId !== currentUser.id) net += theirShare;
+    if(e.payer === memberId && memberId !== currentUser.id) net -= yourShare;
+  });
+  return net;
 }
 
 /* ============================================================
-   RENDER: WORKSPACES
+   RENDER: WORKSPACES (tela inicial)
    ============================================================ */
 function renderWorkspaces(){
   const scroll = document.getElementById('ws-scroll');
   scroll.innerHTML = '';
   Object.values(state.workspaces).forEach(ws=>{
-    const bal = ws.type==='individual' ? ws.balance : groupNetForYou(ws);
+    const bal = ws.type==='individual' ? wsBalance(ws) : groupNetForYou(ws);
     const card = document.createElement('div');
     card.className = 'ws-card' + (ws.id===state.activeWsId?' selected':'');
     card.style.background = `linear-gradient(135deg, ${ws.color}, ${shade(ws.color)})`;
     card.onclick = ()=>selectWorkspace(ws.id);
     card.innerHTML = `
-      <div><div class="ws-icon">${ws.icon}</div><div class="ws-name">${ws.name}</div><div class="ws-type">${ws.type==='individual'?'Individual':'Grupo · '+ws.members.length+' pessoas'}</div></div>
+      <div><div class="ws-icon">${ws.icon}</div><div class="ws-name">${ws.name}</div><div class="ws-type">${ws.type==='individual'?'Individual':'Grupo · '+ws.members.length+' pessoa'+(ws.members.length===1?'':'s')}</div></div>
       <div class="ws-balance">${ws.type==='individual' ? fmtShort(bal) : (bal>=0?'+':'')+fmtShort(bal)}</div>
     `;
     scroll.appendChild(card);
@@ -1012,7 +1407,6 @@ function renderWorkspaces(){
   add.innerHTML = `<span class="plus">+</span><span>Criar área</span>`;
   scroll.appendChild(add);
 
-  // Overview
   let totalGet=0, totalOwe=0;
   Object.values(state.workspaces).filter(w=>w.type==='group').forEach(ws=>{
     const n = groupNetForYou(ws);
@@ -1021,55 +1415,37 @@ function renderWorkspaces(){
   document.getElementById('overview-get').textContent = fmtShort(totalGet);
   document.getElementById('overview-owe').textContent = fmtShort(totalOwe);
 
-  // Recent activity (mix)
   const activity = [];
   Object.values(state.workspaces).forEach(ws=>{
     if(ws.type==='individual'){
       ws.transactions.forEach(t=>activity.push({wsId:ws.id, kind:'tx', id:t.id, wsName:ws.name, wsIcon:ws.icon, wsColor:ws.color, desc:t.desc, amount:t.amount, date:t.date}));
     } else {
-      ws.expenses.forEach(e=>activity.push({wsId:ws.id, kind:'expense', id:e.id, wsName:ws.name, wsIcon:ws.icon, wsColor:ws.color, desc:e.desc, amount:-e.amount, date:e.date, group:true}));
+      ws.expenses.forEach(e=>activity.push({wsId:ws.id, kind:'expense', id:e.id, wsName:ws.name, wsIcon:ws.icon, wsColor:ws.color, desc:e.desc, amount:-e.amount, date:e.date}));
     }
   });
+  activity.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
   const recent = document.getElementById('recent-activity');
   recent.innerHTML = '';
+  if(activity.length === 0){
+    recent.innerHTML = `<div class="empty-state"><div class="ico">📭</div><div class="t">Nada por aqui ainda</div><div class="d">Suas transações e despesas vão aparecer aqui.</div></div>`;
+  }
   activity.slice(0,5).forEach(a=>{
     recent.innerHTML += `
       <div class="list-row" onclick="openDetail('${a.wsId}','${a.kind}','${a.id}')">
         <div class="chip-icon" style="background:${a.wsColor}22">${a.wsIcon}</div>
-        <div class="meta"><div class="title">${a.desc}</div><div class="desc">${a.wsName} · ${a.date}</div></div>
+        <div class="meta"><div class="title">${a.desc}</div><div class="desc">${a.wsName} · ${a.date||''}</div></div>
         <div class="value" style="color:${a.amount<0?'var(--coral)':'var(--teal)'}">${a.amount<0?'-':'+'}${fmtShort(Math.abs(a.amount))}</div>
       </div>`;
   });
-}
-
-function shade(hex){
-  // lighten a hex color a bit for gradient effect
-  const c = hex.replace('#','');
-  const num = parseInt(c,16);
-  let r = (num>>16) + 35, g = ((num>>8)&0xff)+35, b=(num&0xff)+35;
-  r=Math.min(255,r); g=Math.min(255,g); b=Math.min(255,b);
-  return '#' + ((1<<24)+(r<<16)+(g<<8)+b).toString(16).slice(1);
-}
-
-function groupNetForYou(ws){
-  // positive = others owe you, negative = you owe others
-  let net = 0;
-  ws.expenses.forEach(e=>{
-    const yourShare = e.split['you'] || 0;
-    if(e.payer === 'you'){
-      net += (e.amount - yourShare);
-    } else {
-      net -= yourShare;
-    }
-  });
-  return net;
 }
 
 /* ============================================================
    RENDER: DASHBOARD
    ============================================================ */
 function renderDashboard(){
+  if(!state.activeWsId){ return; }
   const ws = state.workspaces[state.activeWsId];
+  if(!ws) return;
   document.getElementById('dash-name').textContent = ws.name;
   const dot = document.getElementById('dash-dot');
   dot.style.background = ws.color + '33';
@@ -1081,19 +1457,22 @@ function renderDashboard(){
   if(ws.type === 'individual'){
     document.getElementById('dash-individual').style.display = 'block';
     document.getElementById('dash-group').style.display = 'none';
+    document.getElementById('income-banner-slot').innerHTML = '';
     document.getElementById('balance-label').textContent = 'Saldo disponível';
-    document.getElementById('balance-amount').textContent = fmt(ws.balance);
+    document.getElementById('balance-amount').textContent = fmt(wsBalance(ws));
     document.getElementById('balance-actions').innerHTML = `
       <button onclick="openAdd()">+ Despesa</button>
-      <button onclick="setTxType('income'); resetTxForm(); goTo('add')">+ Receita</button>
+      <button onclick="state.txType='income'; resetTxForm(); document.getElementById('add-title').textContent='Nova transação'; goTo('add')">+ Receita</button>
       <button onclick="goTo('accounts')">Pagamento</button>
     `;
-    document.getElementById('ind-income').textContent = fmtShort(ws.monthIncome);
-    document.getElementById('ind-expense').textContent = fmtShort(ws.monthExpense);
-    renderBars('bars', ws.bars);
+    const now = new Date(); const ym = now.toISOString().slice(0,7);
+    let monthIncome=0, monthExpense=0;
+    ws.transactions.forEach(t=>{ if(t.date && t.date.slice(0,7)===ym){ if(t.amount>0) monthIncome+=t.amount; else monthExpense+=Math.abs(t.amount); }});
+    document.getElementById('ind-income').textContent = fmtShort(monthIncome);
+    document.getElementById('ind-expense').textContent = fmtShort(monthExpense);
+    renderBars('bars', computeBars(ws));
     renderAccountsPreview(ws);
     renderCatGrid('cat-grid', ws);
-    renderIncomeBanner(ws);
   } else {
     document.getElementById('dash-individual').style.display = 'none';
     document.getElementById('dash-group').style.display = 'block';
@@ -1111,7 +1490,7 @@ function renderDashboard(){
 }
 
 function renderBars(containerId, bars){
-  const max = Math.max(...bars.map(b=>Math.max(b.income,b.expense))) || 1;
+  const max = Math.max(...bars.map(b=>Math.max(b.income,b.expense)), 1);
   const el = document.getElementById(containerId);
   el.innerHTML = '';
   bars.forEach(b=>{
@@ -1129,6 +1508,9 @@ function renderBars(containerId, bars){
 function renderAccountsPreview(ws){
   const el = document.getElementById('accounts-preview');
   el.innerHTML = '';
+  if(ws.paymentMethods.length === 0){
+    el.innerHTML = `<div class="method-chip" onclick="goTo('accounts')">+ adicionar meio de pagamento</div>`;
+  }
   ws.paymentMethods.forEach(m=>{
     const spent = ws.transactions.filter(t=>t.method===m.id && t.amount<0).reduce((s,t)=>s+Math.abs(t.amount),0);
     el.innerHTML += `
@@ -1143,15 +1525,20 @@ function renderDashTransactions(ws){
   const el = document.getElementById('dash-transactions');
   if(!el) return;
   el.innerHTML = '';
+  if(ws.transactions.length === 0){
+    el.innerHTML = `<div class="empty-state"><div class="ico">🧾</div><div class="t">Nenhuma transação ainda</div><div class="d">Toque no + para lançar a primeira.</div></div>`;
+    return;
+  }
   ws.transactions.slice(0,5).forEach(t=>{
     el.innerHTML += transactionRowHTML(ws.id, t);
   });
 }
 function transactionRowHTML(wsId, t){
-  const cat = state.categories.find(c=>c.id===t.cat) || state.categories[state.categories.length-1];
+  const ws = state.workspaces[wsId];
+  const cat = ws.categories.find(c=>c.id===t.cat) || {icon:'🏷️', name:'Sem categoria', color:'#766F8C'};
   return `<div class="list-row" onclick="openDetail('${wsId}','tx','${t.id}')">
     <div class="chip-icon" style="background:${cat.color}22">${cat.icon}</div>
-    <div class="meta"><div class="title">${t.desc}</div><div class="desc">${cat.name} · ${t.date} ${statusTagHTML(t.status||'pago')}</div></div>
+    <div class="meta"><div class="title">${t.desc}</div><div class="desc">${cat.name} · ${t.date} ${statusTagHTML(t.status||'Pago')}</div></div>
     <div class="value" style="color:${t.amount<0?'var(--coral)':'var(--teal)'}">${fmt(t.amount)}</div>
   </div>`;
 }
@@ -1159,15 +1546,18 @@ function transactionRowHTML(wsId, t){
 function renderCatGrid(containerId, ws){
   const el = document.getElementById(containerId);
   el.innerHTML = '';
-  Object.entries(ws.budgetByCategory).forEach(([catId, b])=>{
-    const cat = state.categories.find(c=>c.id===catId);
-    const pct = Math.min(100, Math.round((b.spent/b.limit)*100));
-    const over = b.spent > b.limit;
+  const totals = categorySpend(ws, true);
+  const catIds = Object.keys(totals);
+  if(catIds.length === 0){
+    el.innerHTML = `<div class="empty-state"><div class="ico">🏷️</div><div class="t">Sem gastos este mês</div><div class="d">Lance uma despesa pra ver o resumo por categoria.</div></div>`;
+    return;
+  }
+  catIds.forEach(catId=>{
+    const cat = ws.categories.find(c=>c.id===catId) || {name:'Sem categoria', icon:'🏷️', color:'#766F8C'};
     el.innerHTML += `
       <div class="cat-item" onclick="openCategoryDetail('${ws.id}','${catId}')">
         <div class="top"><span class="name">${cat.icon} ${cat.name}</span></div>
-        <div class="progress-track"><div class="progress-fill" style="width:${pct}%; background:${over?'var(--coral)':cat.color}"></div></div>
-        <div class="amounts"><span>${fmtShort(b.spent)}</span><span>de ${fmtShort(b.limit)}</span></div>
+        <div class="amounts"><span>${fmtShort(totals[catId])}</span><span>este mês</span></div>
       </div>`;
   });
 }
@@ -1175,7 +1565,12 @@ function renderCatGrid(containerId, ws){
 function renderMemberBalances(ws){
   const el = document.getElementById('member-balances');
   el.innerHTML = '';
-  ws.members.filter(m=>m.id!=='you').forEach(m=>{
+  const others = ws.members.filter(m=>m.id!==currentUser.id);
+  if(others.length === 0){
+    el.innerHTML = `<div class="empty-state"><div class="ico">🔗</div><div class="t">Convide pessoas pra dividir</div><div class="d">Toque em "Compartilhar" para gerar o link de convite.</div></div>`;
+    return;
+  }
+  others.forEach(m=>{
     const net = memberNet(ws, m.id);
     el.innerHTML += `
       <div class="member-row">
@@ -1185,50 +1580,41 @@ function renderMemberBalances(ws){
       </div>`;
   });
 }
-function memberNet(ws, memberId){
-  // from "you" perspective: positive = they owe you
-  let net = 0;
-  ws.expenses.forEach(e=>{
-    const theirShare = e.split[memberId] || 0;
-    const yourShare = e.split['you'] || 0;
-    if(e.payer === 'you' && memberId !== 'you'){
-      net += theirShare;
-    }
-    if(e.payer === memberId && memberId !== 'you'){
-      net -= yourShare;
-    }
-  });
-  return net;
-}
 
 function renderGroupExpenses(ws){
   const el = document.getElementById('group-expenses');
   el.innerHTML = '';
-  ws.expenses.slice(-4).reverse().forEach(e=>{
-    const payerObj = ws.members.find(m=>m.id===e.payer);
+  if(ws.expenses.length === 0){
+    el.innerHTML = `<div class="empty-state"><div class="ico">🧾</div><div class="t">Nenhuma despesa ainda</div><div class="d">Toque no + para lançar a primeira.</div></div>`;
+    return;
+  }
+  ws.expenses.slice(0,4).forEach(e=>{
+    const payerObj = ws.members.find(m=>m.id===e.payer) || {name:'Alguém', color:'#766F8C'};
     el.innerHTML += groupExpenseRow(e, payerObj, ws.id);
   });
 }
 function groupExpenseRow(e, payerObj, wsId){
   return `<div class="list-row" onclick="openDetail('${wsId}','expense','${e.id}')">
     <div class="avatar" style="background:${payerObj.color}">${payerObj.name[0]}</div>
-    <div class="meta"><div class="title">${e.desc}</div><div class="desc">${payerObj.name} pagou · ${e.date} ${statusTagHTML(e.status||'pago')}</div></div>
+    <div class="meta"><div class="title">${e.desc}</div><div class="desc">${payerObj.name} pagou · ${e.date} ${statusTagHTML(e.status||'Pago')}</div></div>
     <div class="value">${fmt(e.amount)}</div>
   </div>`;
 }
 
 /* ============================================================
-   ADICIONAR TRANSAÇÃO (individual)
+   ADICIONAR / EDITAR TRANSAÇÃO (individual)
    ============================================================ */
 function resetTxForm(){
   state.selectedCategory = null;
-  state.selectedStatus = 'pago';
+  state.selectedStatus = 'Pago';
   state.selectedRecurring = '';
   document.getElementById('tx-amount').value = '';
   document.getElementById('tx-desc').value = '';
   document.getElementById('tx-note').value = '';
   document.getElementById('amount-display').textContent = 'R$ 0';
   document.getElementById('tx-date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('toggle-expense').classList.toggle('active', state.txType==='expense');
+  document.getElementById('toggle-income').classList.toggle('active', state.txType==='income');
   renderCatPickGrid();
   renderAccountSelect();
   renderStatusPicker('tx-status-row', 'selectedStatus');
@@ -1239,10 +1625,10 @@ function renderStatusPicker(containerId, stateKey){
   el.innerHTML = '';
   state.statusOptions.forEach(s=>{
     const chip = document.createElement('div');
-    chip.className = 'status-chip-pick' + (state[stateKey]===s.id?' selected':'');
-    if(state[stateKey]===s.id) chip.style.background = s.color;
-    chip.innerHTML = `<span class="sdot" style="background:${state[stateKey]===s.id?'white':s.color}"></span>${s.name}`;
-    chip.onclick = ()=>{ state[stateKey] = s.id; renderStatusPicker(containerId, stateKey); };
+    chip.className = 'status-chip-pick' + (state[stateKey]===s.name?' selected':'');
+    if(state[stateKey]===s.name) chip.style.background = s.color;
+    chip.innerHTML = `<span class="sdot" style="background:${state[stateKey]===s.name?'white':s.color}"></span>${s.name}`;
+    chip.onclick = ()=>{ state[stateKey] = s.name; renderStatusPicker(containerId, stateKey); };
     el.appendChild(chip);
   });
   const addChip = document.createElement('div');
@@ -1251,9 +1637,8 @@ function renderStatusPicker(containerId, stateKey){
   addChip.onclick = ()=>{
     const name = prompt('Nome do novo status:');
     if(!name) return;
-    const id = 'custom_'+Date.now();
-    state.statusOptions.push({id, name, color: COLORS[state.statusOptions.length % COLORS.length]});
-    state[stateKey] = id;
+    state.statusOptions.push({name, color: COLORS[state.statusOptions.length % COLORS.length]});
+    state[stateKey] = name;
     renderStatusPicker(containerId, stateKey);
   };
   el.appendChild(addChip);
@@ -1274,25 +1659,26 @@ function syncAmount(){
   document.getElementById('amount-display').textContent = v ? fmt(v) : 'R$ 0';
 }
 function renderCatPickGrid(){
+  const ws = state.workspaces[state.activeWsId];
   const el = document.getElementById('cat-pick-grid');
   el.innerHTML = '';
-  state.categories.forEach(c=>{
+  ws.categories.forEach(c=>{
     const div = document.createElement('div');
-    div.className = 'cat-pick';
+    div.className = 'cat-pick' + (state.selectedCategory===c.id ? ' selected':'');
     div.onclick = ()=>{ state.selectedCategory = c.id; renderCatPickGrid(); };
-    if(state.selectedCategory === c.id) div.classList.add('selected');
     div.innerHTML = `<div class="chip-icon" style="background:${c.color}22">${c.icon}</div><span>${c.name}</span>`;
     el.appendChild(div);
   });
   const addDiv = document.createElement('div');
   addDiv.className = 'cat-pick';
   addDiv.innerHTML = `<div class="chip-icon" style="background:var(--violet-soft); color:var(--violet-1);">+</div><span>Nova</span>`;
-  addDiv.onclick = ()=>{
+  addDiv.onclick = async ()=>{
     const name = prompt('Nome da nova categoria:');
     if(!name) return;
-    const id = 'cat_'+Date.now();
-    state.categories.push({id, name, icon:'🏷️', color: COLORS[state.categories.length % COLORS.length]});
-    state.selectedCategory = id;
+    const { data, error } = await sb.from('categories').insert({workspace_id: ws.id, name, icon:'🏷️', color: COLORS[ws.categories.length % COLORS.length]}).select().single();
+    if(error){ showToast('Erro: '+error.message); return; }
+    ws.categories.push(data);
+    state.selectedCategory = data.id;
     renderCatPickGrid();
   };
   el.appendChild(addDiv);
@@ -1309,55 +1695,46 @@ function renderAccountSelect(){
     sel.innerHTML += `<option value="${m.id}">${m.icon} ${m.name}</option>`;
   });
 }
-function saveTransaction(){
+async function saveTransaction(){
   const ws = state.workspaces[state.activeWsId];
   const amount = parseFloat(document.getElementById('tx-amount').value);
-  const desc = document.getElementById('tx-desc').value || 'Transação';
   if(!amount){ showToast('Informe um valor válido'); return; }
-  const cat = state.selectedCategory || 'outros';
+  const desc = document.getElementById('tx-desc').value || 'Transação';
+  const cat = state.selectedCategory || null;
   const method = document.getElementById('tx-account').value || null;
   const note = document.getElementById('tx-note').value || '';
-  const date = document.getElementById('tx-date').value;
+  const dateVal = document.getElementById('tx-date').value || new Date().toISOString().slice(0,10);
   const signedAmount = state.txType === 'expense' ? -Math.abs(amount) : Math.abs(amount);
 
+  const payload = {
+    workspace_id: ws.id, description:desc, category_id:cat, amount:signedAmount, type:state.txType,
+    method_id: method, occurred_on: dateVal, note, status:state.selectedStatus, recurring:state.selectedRecurring||null,
+    created_by: currentUser.id,
+  };
+
+  let error;
+  showLoading(true);
   if(state.editingTxId){
-    const t = ws.transactions.find(x=>x.id===state.editingTxId);
-    const oldAmount = t.amount;
-    const wasExpense = oldAmount < 0;
-    ws.balance -= oldAmount;
-    if(wasExpense) ws.monthExpense -= Math.abs(oldAmount); else ws.monthIncome -= Math.abs(oldAmount);
-    if(ws.budgetByCategory[t.cat] && wasExpense){ ws.budgetByCategory[t.cat].spent -= Math.abs(oldAmount); }
-
-    t.desc = desc; t.cat = cat; t.amount = signedAmount; t.type = state.txType; t.method = method; t.note = note;
-    t.status = state.selectedStatus; t.recurring = state.selectedRecurring;
-    if(date) t.date = formatDateBR(date);
-
-    ws.balance += signedAmount;
-    if(state.txType==='expense') ws.monthExpense += Math.abs(amount); else ws.monthIncome += Math.abs(amount);
-    if(ws.budgetByCategory[cat] && state.txType==='expense'){ ws.budgetByCategory[cat].spent += Math.abs(amount); }
-    showToast('Transação atualizada ✓');
-    state.editingTxId = null;
+    ({ error } = await sb.from('transactions').update(payload).eq('id', state.editingTxId));
   } else {
-    ws.transactions.unshift({id:'t_'+Date.now(), desc, cat, amount:signedAmount, type:state.txType, date:'hoje', method, note, status:state.selectedStatus, recurring:state.selectedRecurring, linkedToIncome:false});
-    ws.balance += signedAmount;
-    if(state.txType==='expense') ws.monthExpense += Math.abs(amount); else ws.monthIncome += Math.abs(amount);
-    if(ws.budgetByCategory[cat] && state.txType==='expense'){ ws.budgetByCategory[cat].spent += Math.abs(amount); }
-    showToast('Transação salva ✓');
+    ({ error } = await sb.from('transactions').insert(payload));
   }
+  if(error){ showLoading(false); showToast('Erro: '+error.message); return; }
+  state.editingTxId = null;
+  await ensureWorkspaceLoaded(ws.id);
+  showLoading(false);
+  showToast('Transação salva ✓');
   goTo('dashboard');
-}
-function formatDateBR(isoDate){
-  const [y,m,d] = isoDate.split('-');
-  return `${d}/${m}`;
 }
 
 /* ============================================================
-   ADICIONAR DESPESA DE GRUPO (Splitwise-like)
+   ADICIONAR / EDITAR DESPESA DE GRUPO
    ============================================================ */
 function resetGroupForm(){
-  state.selectedPayer = 'you';
-  state.selectedResponsavel = 'you';
-  state.selectedStatus = 'pago';
+  const ws = state.workspaces[state.activeWsId];
+  state.selectedPayer = currentUser.id;
+  state.selectedResponsavel = currentUser.id;
+  state.selectedStatus = 'Pago';
   state.splitType = 'equal';
   document.getElementById('g-amount').value = '';
   document.getElementById('g-desc').value = '';
@@ -1413,27 +1790,33 @@ function renderSplit(){
     el.appendChild(row);
   });
 }
-function saveGroupExpense(){
+async function saveGroupExpense(){
   const ws = state.workspaces[state.activeWsId];
   const amount = parseFloat(document.getElementById('g-amount').value);
-  const desc = document.getElementById('g-desc').value || 'Despesa do grupo';
   if(!amount){ showToast('Informe um valor válido'); return; }
-  const split = {};
-  document.querySelectorAll('#split-list input').forEach(inp=>{
-    split[inp.dataset.member] = parseFloat(inp.value) || 0;
-  });
+  const desc = document.getElementById('g-desc').value || 'Despesa do grupo';
   const note = document.getElementById('g-note').value || '';
+  const split = {};
+  document.querySelectorAll('#split-list input').forEach(inp=>{ split[inp.dataset.member] = parseFloat(inp.value) || 0; });
 
+  const payload = {
+    workspace_id: ws.id, description:desc, amount, payer_id: state.selectedPayer, responsavel_id: state.selectedResponsavel,
+    split, status: state.selectedStatus, note, created_by: currentUser.id,
+  };
+
+  let error;
+  showLoading(true);
   if(state.editingExpenseId){
-    const e = ws.expenses.find(x=>x.id===state.editingExpenseId);
-    e.desc = desc; e.amount = amount; e.payer = state.selectedPayer; e.responsavel = state.selectedResponsavel;
-    e.split = split; e.status = state.selectedStatus; e.note = note;
-    showToast('Despesa atualizada ✓');
-    state.editingExpenseId = null;
+    ({ error } = await sb.from('group_expenses').update(payload).eq('id', state.editingExpenseId));
   } else {
-    ws.expenses.push({id:'e_'+Date.now(), desc, amount, payer: state.selectedPayer, responsavel: state.selectedResponsavel, date:'hoje', split, status:state.selectedStatus, note});
-    showToast('Despesa adicionada ao grupo ✓');
+    payload.occurred_on = new Date().toISOString().slice(0,10);
+    ({ error } = await sb.from('group_expenses').insert(payload));
   }
+  if(error){ showLoading(false); showToast('Erro: '+error.message); return; }
+  state.editingExpenseId = null;
+  await ensureWorkspaceLoaded(ws.id);
+  showLoading(false);
+  showToast('Despesa salva ✓');
   goTo('dashboard');
 }
 
@@ -1445,7 +1828,7 @@ function renderSettle(){
   const el = document.getElementById('settle-list');
   el.innerHTML = '';
   let any = false;
-  ws.members.filter(m=>m.id!=='you').forEach(m=>{
+  ws.members.filter(m=>m.id!==currentUser.id).forEach(m=>{
     const net = memberNet(ws, m.id);
     if(net === 0) return;
     any = true;
@@ -1461,21 +1844,27 @@ function renderSettle(){
     el.innerHTML = `<div class="empty-state"><div class="ico">✅</div><div class="t">Tudo certo!</div><div class="d">Não há saldos pendentes neste grupo.</div></div>`;
   }
 }
-function settleMember(memberId){
+async function settleMember(memberId){
   const ws = state.workspaces[state.activeWsId];
   const net = memberNet(ws, memberId);
-  // create a settlement "expense" that zeroes the balance
+  let payload = null;
+  const today = new Date().toISOString().slice(0,10);
   if(net > 0){
-    ws.expenses.push({desc:'Acerto de contas', amount:net, payer: memberId, date:'hoje', split:{you:net}});
+    payload = {workspace_id: ws.id, description:'Acerto de contas', amount:net, payer_id:memberId, responsavel_id:memberId, occurred_on:today, split:{[currentUser.id]:net}, status:'Pago', created_by:currentUser.id};
   } else if(net < 0){
-    ws.expenses.push({desc:'Acerto de contas', amount:Math.abs(net), payer:'you', date:'hoje', split:{[memberId]:Math.abs(net)}});
+    payload = {workspace_id: ws.id, description:'Acerto de contas', amount:Math.abs(net), payer_id:currentUser.id, responsavel_id:currentUser.id, occurred_on:today, split:{[memberId]:Math.abs(net)}, status:'Pago', created_by:currentUser.id};
   }
+  if(payload){
+    const { error } = await sb.from('group_expenses').insert(payload);
+    if(error){ showToast('Erro: '+error.message); return; }
+  }
+  await ensureWorkspaceLoaded(ws.id);
   showToast('Saldo atualizado ✓');
   renderSettle();
 }
 
 /* ============================================================
-   CONTAS / CATEGORIAS / RELATÓRIOS (telas cheias)
+   MEIOS DE PAGAMENTO
    ============================================================ */
 function renderAccountsFull(){
   const ws = state.workspaces[state.activeWsId];
@@ -1499,407 +1888,6 @@ function renderAccountsFull(){
       </div>`;
   });
 }
-
-function renderCategoriesFull(){
-  const ws = state.workspaces[state.activeWsId];
-  const el = document.getElementById('cat-grid-full');
-  el.innerHTML = '';
-  if(ws.type !== 'individual'){
-    el.innerHTML = `<div class="empty-state"><div class="ico">🏷️</div><div class="t">Categorias por área individual</div><div class="d">Espaços em grupo usam divisão entre membros.</div></div>`;
-    return;
-  }
-  Object.entries(ws.budgetByCategory).forEach(([catId, b])=>{
-    const cat = state.categories.find(c=>c.id===catId);
-    const pct = Math.min(100, Math.round((b.spent/b.limit)*100));
-    const over = b.spent > b.limit;
-    el.innerHTML += `
-      <div class="cat-item" onclick="openCategoryDetail('${ws.id}','${catId}')">
-        <div class="top"><span class="name">${cat.icon} ${cat.name}</span><span style="font-size:11px; font-weight:700; color:${over?'var(--coral)':'var(--muted)'}">${pct}%</span></div>
-        <div class="progress-track"><div class="progress-fill" style="width:${pct}%; background:${over?'var(--coral)':cat.color}"></div></div>
-        <div class="amounts"><span>${fmt(b.spent)}</span><span>limite ${fmt(b.limit)}</span></div>
-      </div>`;
-  });
-}
-
-function renderReports(){
-  const ws = state.workspaces[state.activeWsId];
-  if(ws.type === 'individual'){
-    renderBars('bars-full', ws.bars);
-    renderCatGrid('cat-grid-report', ws);
-  } else {
-    document.getElementById('bars-full').innerHTML = '';
-    const totals = {};
-    ws.expenses.forEach(e=>{ totals[e.payer] = (totals[e.payer]||0) + e.amount; });
-    const el = document.getElementById('cat-grid-report');
-    el.innerHTML = '';
-    ws.members.forEach(m=>{
-      const paid = totals[m.id] || 0;
-      el.innerHTML += `
-        <div class="cat-item">
-          <div class="top"><span class="name">${m.name}</span></div>
-          <div class="amounts"><span>pagou no total</span><span>${fmtShort(paid)}</span></div>
-        </div>`;
-    });
-  }
-}
-
-function renderGroupHistoryFull(){
-  const ws = state.workspaces[state.activeWsId];
-  const el = document.getElementById('group-history-full');
-  el.innerHTML = '';
-  ws.expenses.slice().reverse().forEach(e=>{
-    const payerObj = ws.members.find(m=>m.id===e.payer);
-    el.innerHTML += groupExpenseRow(e, payerObj, ws.id);
-  });
-}
-
-/* ============================================================
-   SETTINGS
-   ============================================================ */
-function renderSettings(){
-  const el = document.getElementById('settings-ws-list');
-  el.innerHTML = '';
-  Object.values(state.workspaces).forEach(ws=>{
-    const row = document.createElement('div');
-    row.className = 'list-row';
-    row.style.flexDirection = 'column';
-    row.style.alignItems = 'stretch';
-    row.innerHTML = `
-      <div style="display:flex; align-items:center; gap:12px; cursor:pointer;" onclick="selectWorkspace('${ws.id}')">
-        <div class="chip-icon" style="background:${ws.color}22">${ws.icon}</div>
-        <div class="meta"><div class="title">${ws.name}</div><div class="desc">${ws.type==='individual'?'Individual':'Compartilhada · '+ws.members.length+' membros'} · ${ws.currency}</div></div>
-        <div class="value" style="color:var(--muted); font-size:13px;">›</div>
-      </div>
-      <div class="ws-actions-row">
-        <div class="ws-act edit" onclick="openEditWs('${ws.id}')">✏️ Editar</div>
-        <div class="ws-act del" onclick="confirmDeleteWs('${ws.id}')">🗑️ Excluir</div>
-      </div>
-    `;
-    el.appendChild(row);
-  });
-}
-
-/* ============================================================
-   NOVA ÁREA
-   ============================================================ */
-function resetNewWsForm(){
-  state.newWsType = 'individual';
-  state.newWsIcon = ICONS[0];
-  state.newWsColor = COLORS[0];
-  document.getElementById('newws-name').value = '';
-  document.getElementById('newws-members').value = '';
-  document.getElementById('newws-budget').value = '';
-  setWsType('individual');
-  renderIconSwatches();
-  renderColorSwatches();
-}
-function setWsType(type){
-  state.newWsType = type;
-  document.getElementById('newws-individual').classList.toggle('active', type==='individual');
-  document.getElementById('newws-group').classList.toggle('active', type==='group');
-  document.getElementById('newws-budget-field').style.display = type==='individual' ? 'block':'none';
-  document.getElementById('newws-members-field').style.display = type==='group' ? 'block':'none';
-}
-function renderIconSwatches(){
-  const el = document.getElementById('icon-swatches');
-  el.innerHTML = '';
-  ICONS.forEach(ic=>{
-    const div = document.createElement('div');
-    div.className = 'icon-swatch' + (state.newWsIcon===ic?' selected':'');
-    div.textContent = ic;
-    div.onclick = ()=>{ state.newWsIcon = ic; renderIconSwatches(); };
-    el.appendChild(div);
-  });
-}
-function renderColorSwatches(){
-  const el = document.getElementById('color-swatches');
-  el.innerHTML = '';
-  COLORS.forEach(c=>{
-    const div = document.createElement('div');
-    div.className = 'swatch' + (state.newWsColor===c?' selected':'');
-    div.style.background = c;
-    div.onclick = ()=>{ state.newWsColor = c; renderColorSwatches(); };
-    el.appendChild(div);
-  });
-}
-function createWorkspace(){
-  const name = document.getElementById('newws-name').value.trim();
-  if(!name){ showToast('Dê um nome para a área'); return; }
-  const id = 'ws_' + Date.now();
-  const currency = document.getElementById('newws-currency').value;
-
-  if(state.newWsType === 'individual'){
-    const budget = parseFloat(document.getElementById('newws-budget').value) || 0;
-    state.workspaces[id] = {
-      id, name, type:'individual', icon:state.newWsIcon, color:state.newWsColor, currency,
-      balance:0, monthIncome:0, monthExpense:0,
-      budgetByCategory: budget ? {outros:{limit:budget, spent:0}} : {},
-      bars: [{m:'Jan',income:0,expense:0},{m:'Fev',income:0,expense:0},{m:'Mar',income:0,expense:0}],
-      paymentMethods: [], transactions: [],
-    };
-  } else {
-    const namesRaw = document.getElementById('newws-members').value.trim();
-    const names = namesRaw ? namesRaw.split(',').map(s=>s.trim()).filter(Boolean) : [];
-    const members = [{id:'you', name:'Você', color:state.newWsColor}];
-    names.forEach((n,i)=>{
-      if(n.toLowerCase()==='você' || n.toLowerCase()==='you') return;
-      members.push({id:'m_'+i+'_'+Date.now(), name:n, color: COLORS[(i+1)%COLORS.length]});
-    });
-    state.workspaces[id] = {
-      id, name, type:'group', icon:state.newWsIcon, color:state.newWsColor, currency,
-      members, expenses:[],
-    };
-  }
-  showToast('Área "'+name+'" criada ✓');
-  selectWorkspace(id);
-}
-
-/* ============================================================
-   MODAL: DETALHE DA TRANSAÇÃO
-   ============================================================ */
-function openDetail(wsId, kind, id){
-  const ws = state.workspaces[wsId];
-  state.detail = {wsId, kind, id};
-  const overlay = document.getElementById('detail-modal');
-  document.getElementById('detail-status-editor').style.display = 'none';
-
-  if(kind === 'tx'){
-    const t = ws.transactions.find(x=>x.id===id);
-    const cat = state.categories.find(c=>c.id===t.cat) || state.categories[state.categories.length-1];
-    const method = ws.paymentMethods.find(m=>m.id===t.method);
-    document.getElementById('detail-icon').style.background = cat.color+'22';
-    document.getElementById('detail-icon').textContent = cat.icon;
-    document.getElementById('detail-title').textContent = t.desc;
-    const amountEl = document.getElementById('detail-amount');
-    amountEl.textContent = fmt(t.amount);
-    amountEl.style.color = t.amount<0 ? 'var(--coral)' : 'var(--teal)';
-    document.getElementById('detail-rows').innerHTML = `
-      <div class="modal-row"><span class="k">Área</span><span class="v">${ws.icon} ${ws.name}</span></div>
-      <div class="modal-row"><span class="k">Categoria</span><span class="v">${cat.icon} ${cat.name}</span></div>
-      <div class="modal-row"><span class="k">Meio de pagamento</span><span class="v">${method ? method.icon+' '+method.name : '—'}</span></div>
-      <div class="modal-row"><span class="k">Data</span><span class="v">${t.date}</span></div>
-      <div class="modal-row status-row-clickable" onclick="toggleStatusEditor()"><span class="k">Status</span><span class="v">${statusTagHTML(t.status||'pago')}</span></div>
-      ${t.recurring ? `<div class="modal-row"><span class="k">Recorrência</span><span class="v">${recurringTagHTML(t.recurring)}</span></div>` : ''}
-      ${t.note ? `<div class="modal-row"><span class="k">Observação</span><span class="v">${t.note}</span></div>` : ''}
-    `;
-    document.getElementById('detail-split').style.display = 'none';
-  } else {
-    const e = ws.expenses.find(x=>x.id===id);
-    const payerObj = ws.members.find(m=>m.id===e.payer);
-    const respObj = ws.members.find(m=>m.id===e.responsavel) || payerObj;
-    document.getElementById('detail-icon').style.background = ws.color+'22';
-    document.getElementById('detail-icon').textContent = ws.icon;
-    document.getElementById('detail-title').textContent = e.desc;
-    const amountEl = document.getElementById('detail-amount');
-    amountEl.textContent = fmt(e.amount);
-    amountEl.style.color = 'var(--ink)';
-    document.getElementById('detail-rows').innerHTML = `
-      <div class="modal-row"><span class="k">Grupo</span><span class="v">${ws.icon} ${ws.name}</span></div>
-      <div class="modal-row"><span class="k">Pago por</span><span class="v"><div class="avatar" style="width:20px;height:20px;font-size:10px;background:${payerObj.color}">${payerObj.name[0]}</div>${payerObj.name}</span></div>
-      <div class="modal-row"><span class="k">Responsável</span><span class="v"><div class="avatar" style="width:20px;height:20px;font-size:10px;background:${respObj.color}">${respObj.name[0]}</div>${respObj.name}</span></div>
-      <div class="modal-row"><span class="k">Data</span><span class="v">${e.date}</span></div>
-      <div class="modal-row status-row-clickable" onclick="toggleStatusEditor()"><span class="k">Status</span><span class="v">${statusTagHTML(e.status||'pago')}</span></div>
-      ${e.note ? `<div class="modal-row"><span class="k">Observação</span><span class="v">${e.note}</span></div>` : ''}
-    `;
-    document.getElementById('detail-split').style.display = 'block';
-    const splitEl = document.getElementById('detail-split-list');
-    splitEl.innerHTML = '';
-    ws.members.forEach(m=>{
-      const share = e.split[m.id] || 0;
-      if(share === 0) return;
-      splitEl.innerHTML += `
-        <div class="split-detail-row">
-          <span class="who"><div class="avatar" style="width:22px;height:22px;font-size:10px;background:${m.color}">${m.name[0]}</div>${m.name}</span>
-          <span>${fmt(share)}</span>
-        </div>`;
-    });
-  }
-  overlay.classList.add('show');
-}
-function toggleStatusEditor(){
-  const el = document.getElementById('detail-status-editor');
-  const showing = el.style.display === 'block';
-  if(showing){ el.style.display = 'none'; return; }
-  el.innerHTML = `<div class="status-pick-row">${state.statusOptions.map(s=>
-    `<div class="status-chip-pick" style="background:${s.color}; color:white; border-color:transparent;" onclick="applyStatusChange('${s.id}')"><span class="sdot" style="background:white"></span>${s.name}</div>`
-  ).join('')}</div>`;
-  el.style.display = 'block';
-}
-function applyStatusChange(newStatusId){
-  if(!state.detail) return;
-  const {wsId, kind, id} = state.detail;
-  const ws = state.workspaces[wsId];
-  if(kind === 'tx'){
-    const t = ws.transactions.find(x=>x.id===id);
-    t.status = newStatusId;
-  } else {
-    const e = ws.expenses.find(x=>x.id===id);
-    e.status = newStatusId;
-  }
-  showToast('Status atualizado ✓');
-  openDetail(wsId, kind, id);
-  if(state.activeWsId === wsId) renderDashboard();
-}
-function closeDetail(){
-  document.getElementById('detail-modal').classList.remove('show');
-  state.detail = null;
-}
-function duplicateCurrentTx(){
-  if(!state.detail) return;
-  const {wsId, kind, id} = state.detail;
-  const ws = state.workspaces[wsId];
-  if(kind === 'tx'){
-    const t = ws.transactions.find(x=>x.id===id);
-    ws.transactions.unshift({...t, id:'t_'+Date.now(), date:'hoje'});
-    ws.balance += t.amount;
-  } else {
-    const e = ws.expenses.find(x=>x.id===id);
-    ws.expenses.push({...e, id:'e_'+Date.now(), date:'hoje'});
-  }
-  showToast('Transação duplicada ✓');
-  closeDetail();
-  if(state.activeWsId === wsId){ renderDashboard(); }
-}
-function deleteCurrentTx(){
-  if(!state.detail) return;
-  const {wsId, kind, id} = state.detail;
-  const ws = state.workspaces[wsId];
-  if(kind === 'tx'){
-    const t = ws.transactions.find(x=>x.id===id);
-    ws.balance -= t.amount;
-    ws.transactions = ws.transactions.filter(x=>x.id!==id);
-  } else {
-    ws.expenses = ws.expenses.filter(x=>x.id!==id);
-  }
-  showToast('Transação excluída');
-  closeDetail();
-  if(state.activeWsId === wsId){ renderDashboard(); }
-}
-
-/* ============================================================
-   EDITAR TRANSAÇÃO / DESPESA EXISTENTE
-   ============================================================ */
-function editCurrentTx(){
-  if(!state.detail) return;
-  const {wsId, kind, id} = state.detail;
-  closeDetail();
-  if(kind === 'tx') openEditTx(wsId, id);
-  else openEditExpense(wsId, id);
-}
-function openEditTx(wsId, id){
-  state.activeWsId = wsId;
-  const ws = state.workspaces[wsId];
-  const t = ws.transactions.find(x=>x.id===id);
-  state.editingTxId = id;
-  state.editingExpenseId = null;
-  state.txType = t.type;
-  state.selectedCategory = t.cat;
-  state.selectedStatus = t.status || 'pago';
-  state.selectedRecurring = t.recurring || '';
-  document.getElementById('tx-amount').value = Math.abs(t.amount);
-  document.getElementById('tx-desc').value = t.desc;
-  document.getElementById('tx-note').value = t.note || '';
-  document.getElementById('amount-display').textContent = fmt(Math.abs(t.amount));
-  document.getElementById('tx-date').value = new Date().toISOString().slice(0,10);
-  document.getElementById('toggle-expense').classList.toggle('active', t.type==='expense');
-  document.getElementById('toggle-income').classList.toggle('active', t.type==='income');
-  renderCatPickGrid();
-  renderAccountSelect();
-  if(t.method) document.getElementById('tx-account').value = t.method;
-  renderStatusPicker('tx-status-row', 'selectedStatus');
-  renderRecurringRow();
-  document.getElementById('add-title').textContent = 'Editar transação';
-  goTo('add');
-}
-function openEditExpense(wsId, id){
-  state.activeWsId = wsId;
-  const ws = state.workspaces[wsId];
-  const e = ws.expenses.find(x=>x.id===id);
-  state.editingExpenseId = id;
-  state.editingTxId = null;
-  state.selectedPayer = e.payer;
-  state.selectedResponsavel = e.responsavel || e.payer;
-  state.selectedStatus = e.status || 'pago';
-  state.splitType = 'custom';
-  document.getElementById('g-amount').value = e.amount;
-  document.getElementById('g-desc').value = e.desc;
-  document.getElementById('g-note').value = e.note || '';
-  document.getElementById('split-equal').classList.remove('active');
-  document.getElementById('split-custom').classList.add('active');
-  renderPayerSelect();
-  renderResponsavelSelect();
-  renderSplit();
-  document.querySelectorAll('#split-list input').forEach(inp=>{
-    const mid = inp.dataset.member;
-    inp.value = (e.split[mid]||0).toFixed(2);
-  });
-  renderStatusPicker('g-status-row', 'selectedStatus');
-  document.getElementById('add-group-title').textContent = 'Editar despesa';
-  goTo('add-group');
-}
-
-/* ============================================================
-   DETALHE DE CATEGORIA
-   ============================================================ */
-function openCategoryDetail(wsId, catId){
-  state.activeWsId = wsId;
-  const ws = state.workspaces[wsId];
-  const cat = state.categories.find(c=>c.id===catId);
-  const budget = ws.budgetByCategory[catId];
-  const head = document.getElementById('catdetail-head');
-  head.style.background = `linear-gradient(135deg, ${cat.color}, ${shade(cat.color)})`;
-  head.innerHTML = budget ? `
-    <div class="nm">${cat.icon} ${cat.name}</div>
-    <div class="sub">Limite mensal: ${fmt(budget.limit)}</div>
-    <div class="big">${fmt(budget.spent)}</div>
-  ` : `
-    <div class="nm">${cat.icon} ${cat.name}</div>
-    <div class="sub">Sem limite definido neste espaço</div>
-  `;
-  const items = ws.transactions.filter(t=>t.cat===catId);
-  const list = document.getElementById('catdetail-list');
-  list.innerHTML = '';
-  if(items.length === 0){
-    list.innerHTML = `<div class="empty-state"><div class="ico">🏷️</div><div class="t">Nenhum gasto nessa categoria</div><div class="d">Lançamentos com essa categoria aparecerão aqui.</div></div>`;
-  } else {
-    items.forEach(t=>{ list.innerHTML += transactionRowHTML(wsId, t); });
-  }
-  goTo('catdetail');
-}
-
-/* ============================================================
-   COMPARTILHAR ÁREA
-   ============================================================ */
-function openShare(wsId){
-  const ws = state.workspaces[wsId];
-  if(ws.type !== 'group'){ showToast('Compartilhamento disponível só em áreas compartilhadas'); return; }
-  state.shareWsId = wsId;
-  const link = `https://rateio.app/w/${wsId}-${Math.random().toString(36).slice(2,8)}`;
-  document.getElementById('share-link-text').textContent = link;
-  const list = document.getElementById('share-members-list');
-  list.innerHTML = '';
-  ws.members.forEach(m=>{
-    list.innerHTML += `
-      <div class="member-mini">
-        <div class="avatar" style="background:${m.color}">${m.name[0]}</div>
-        <div class="name">${m.name}</div>
-        <div class="role">${m.id==='you'?'Você · dono':'Membro'}</div>
-      </div>`;
-  });
-  goTo('share');
-}
-function copyShareLink(){
-  const text = document.getElementById('share-link-text').textContent;
-  if(navigator.clipboard && navigator.clipboard.writeText){
-    navigator.clipboard.writeText(text).then(()=>showToast('Link copiado ✓')).catch(()=>showToast('Não foi possível copiar'));
-  } else {
-    showToast('Link copiado ✓');
-  }
-}
-
-/* ============================================================
-   NOVO MEIO DE PAGAMENTO
-   ============================================================ */
 function openNewMethod(){
   state.newMethodIcon = '💳';
   state.newMethodColor = COLORS[0];
@@ -1930,76 +1918,174 @@ function renderMethodColorSwatches(){
     el.appendChild(div);
   });
 }
-function saveNewMethod(){
+async function saveNewMethod(){
   const ws = state.workspaces[state.activeWsId];
   const name = document.getElementById('newmethod-name').value.trim();
   if(!name){ showToast('Dê um nome para o meio de pagamento'); return; }
-  ws.paymentMethods.push({id:'pm_'+Date.now(), name, icon:state.newMethodIcon, color:state.newMethodColor});
+  const { data, error } = await sb.from('payment_methods').insert({workspace_id: ws.id, name, icon:state.newMethodIcon, color:state.newMethodColor}).select().single();
+  if(error){ showToast('Erro: '+error.message); return; }
+  ws.paymentMethods.push(data);
   showToast('Meio de pagamento adicionado ✓');
   goTo('accounts');
 }
 
 /* ============================================================
-   RENDA FIXA / LEMBRETE DE ENTRADA
+   CATEGORIAS
    ============================================================ */
-function renderIncomeBanner(ws){
-  const slot = document.getElementById('income-banner-slot');
-  slot.innerHTML = '';
-  if(!ws.fixedIncome) return;
-  const fi = ws.fixedIncome;
-  const today = new Date();
-  const isJuneDemo = true; // protótipo fixado no mês de Junho
-  if(fi.confirmed){
+function renderCategoriesFull(){
+  const ws = state.workspaces[state.activeWsId];
+  const el = document.getElementById('cat-grid-full');
+  el.innerHTML = '';
+  if(ws.type !== 'individual'){
+    el.innerHTML = `<div class="empty-state"><div class="ico">🏷️</div><div class="t">Categorias por área individual</div><div class="d">Espaços em grupo usam divisão entre membros.</div></div>`;
     return;
   }
-  if(today.getDate() >= fi.day || isJuneDemo){
-    slot.innerHTML = `
-      <div class="income-banner">
-        <div class="ico">🔔</div>
-        <div class="meta">
-          <div class="t">${fi.name} · dia ${fi.day} — aguardando confirmação</div>
-          <div class="d">Confirme quando o valor de ${fmt(fi.amount)} cair na conta. As contas vinculadas a essa entrada serão liberadas para pagamento.</div>
-          <button onclick="confirmIncome('${ws.id}')">Confirmar recebimento</button>
-        </div>
+  if(ws.categories.length === 0){
+    el.innerHTML = `<div class="empty-state"><div class="ico">🏷️</div><div class="t">Nenhuma categoria ainda</div><div class="d">Crie categorias pra organizar seus gastos.</div></div>`;
+  }
+  const totals = categorySpend(ws, false);
+  ws.categories.forEach(cat=>{
+    const spent = totals[cat.id] || 0;
+    el.innerHTML += `
+      <div class="cat-item" onclick="openCategoryDetail('${ws.id}','${cat.id}')">
+        <div class="top"><span class="name">${cat.icon} ${cat.name}</span></div>
+        <div class="amounts"><span>${fmt(spent)}</span><span>total</span></div>
       </div>`;
+  });
+}
+async function createCategoryQuick(){
+  const ws = state.workspaces[state.activeWsId];
+  const name = prompt('Nome da nova categoria:');
+  if(!name) return;
+  const { data, error } = await sb.from('categories').insert({workspace_id: ws.id, name, icon:'🏷️', color: COLORS[ws.categories.length % COLORS.length]}).select().single();
+  if(error){ showToast('Erro: '+error.message); return; }
+  ws.categories.push(data);
+  showToast('Categoria "'+name+'" criada ✓');
+  renderCategoriesFull();
+}
+function openCategoryDetail(wsId, catId){
+  state.activeWsId = wsId;
+  const ws = state.workspaces[wsId];
+  const cat = ws.categories.find(c=>c.id===catId) || {name:'Categoria', icon:'🏷️', color:'#766F8C'};
+  const totals = categorySpend(ws, false);
+  const head = document.getElementById('catdetail-head');
+  head.style.background = `linear-gradient(135deg, ${cat.color}, ${shade(cat.color)})`;
+  head.innerHTML = `
+    <div class="nm">${cat.icon} ${cat.name}</div>
+    <div class="sub">Total gasto nessa categoria</div>
+    <div class="big">${fmt(totals[catId]||0)}</div>
+  `;
+  const items = ws.transactions.filter(t=>t.cat===catId);
+  const list = document.getElementById('catdetail-list');
+  list.innerHTML = '';
+  if(items.length === 0){
+    list.innerHTML = `<div class="empty-state"><div class="ico">🏷️</div><div class="t">Nenhum gasto nessa categoria</div><div class="d">Lançamentos com essa categoria aparecerão aqui.</div></div>`;
+  } else {
+    items.forEach(t=>{ list.innerHTML += transactionRowHTML(wsId, t); });
+  }
+  goTo('catdetail');
+}
+
+/* ============================================================
+   RELATÓRIOS
+   ============================================================ */
+function renderReports(){
+  const ws = state.workspaces[state.activeWsId];
+  if(ws.type === 'individual'){
+    renderBars('bars-full', computeBars(ws));
+    const totals = categorySpend(ws, false);
+    const el = document.getElementById('cat-grid-report');
+    el.innerHTML = '';
+    ws.categories.forEach(cat=>{
+      const spent = totals[cat.id] || 0;
+      el.innerHTML += `
+        <div class="cat-item" onclick="openCategoryDetail('${ws.id}','${cat.id}')">
+          <div class="top"><span class="name">${cat.icon} ${cat.name}</span></div>
+          <div class="amounts"><span>${fmt(spent)}</span><span>total</span></div>
+        </div>`;
+    });
+  } else {
+    document.getElementById('bars-full').innerHTML = '';
+    const totals = {};
+    ws.expenses.forEach(e=>{ totals[e.payer] = (totals[e.payer]||0) + e.amount; });
+    const el = document.getElementById('cat-grid-report');
+    el.innerHTML = '';
+    ws.members.forEach(m=>{
+      const paid = totals[m.id] || 0;
+      el.innerHTML += `
+        <div class="cat-item">
+          <div class="top"><span class="name">${m.name}</span></div>
+          <div class="amounts"><span>pagou no total</span><span>${fmtShort(paid)}</span></div>
+        </div>`;
+    });
   }
 }
-function confirmIncome(wsId){
-  const ws = state.workspaces[wsId];
-  const fi = ws.fixedIncome;
-  ws.transactions.unshift({id:'t_'+Date.now(), desc:fi.name, cat:'outros', amount:fi.amount, type:'income', date:'hoje', method:null, note:'Entrada confirmada manualmente', status:'pago', recurring:'fixa', linkedToIncome:false});
-  ws.balance += fi.amount;
-  ws.monthIncome += fi.amount;
-  fi.confirmed = true;
-  let released = 0;
-  ws.transactions.forEach(t=>{
-    if(t.linkedToIncome && t.status==='aguardando'){
-      t.status = 'a_pagar';
-      released++;
-    }
+function renderGroupHistoryFull(){
+  const ws = state.workspaces[state.activeWsId];
+  const el = document.getElementById('group-history-full');
+  el.innerHTML = '';
+  ws.expenses.forEach(e=>{
+    const payerObj = ws.members.find(m=>m.id===e.payer) || {name:'Alguém', color:'#766F8C'};
+    el.innerHTML += groupExpenseRow(e, payerObj, ws.id);
   });
-  showToast(released ? `Recebimento confirmado — ${released} conta(s) liberada(s) ✓` : 'Recebimento confirmado ✓');
-  renderDashboard();
+}
+
+/* ============================================================
+   NOVA ÁREA
+   ============================================================ */
+function resetNewWsForm(){
+  state.newWsType = 'individual';
+  state.newWsIcon = ICONS[0];
+  state.newWsColor = COLORS[0];
+  document.getElementById('newws-name').value = '';
+  document.getElementById('newws-budget').value = '';
+  setWsType('individual');
+  renderIconSwatches();
+  renderColorSwatches();
+}
+function setWsType(type){
+  state.newWsType = type;
+  document.getElementById('newws-individual').classList.toggle('active', type==='individual');
+  document.getElementById('newws-group').classList.toggle('active', type==='group');
+  document.getElementById('newws-budget-field').style.display = type==='individual' ? 'block':'none';
+  document.getElementById('newws-group-hint').style.display = type==='group' ? 'block':'none';
+}
+function renderIconSwatches(){
+  const el = document.getElementById('icon-swatches');
+  el.innerHTML = '';
+  ICONS.forEach(ic=>{
+    const div = document.createElement('div');
+    div.className = 'icon-swatch' + (state.newWsIcon===ic?' selected':'');
+    div.textContent = ic;
+    div.onclick = ()=>{ state.newWsIcon = ic; renderIconSwatches(); };
+    el.appendChild(div);
+  });
+}
+function renderColorSwatches(){
+  const el = document.getElementById('color-swatches');
+  el.innerHTML = '';
+  COLORS.forEach(c=>{
+    const div = document.createElement('div');
+    div.className = 'swatch' + (state.newWsColor===c?' selected':'');
+    div.style.background = c;
+    div.onclick = ()=>{ state.newWsColor = c; renderColorSwatches(); };
+    el.appendChild(div);
+  });
 }
 
 /* ============================================================
    CALENDÁRIO
    ============================================================ */
-const MONTH_NAMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 function shiftMonth(dir){
   state.calendarMonth += dir;
   if(state.calendarMonth > 11){ state.calendarMonth = 0; state.calendarYear++; }
   if(state.calendarMonth < 0){ state.calendarMonth = 11; state.calendarYear--; }
   renderCalendar();
 }
-function dayMatches(dateStr, day, month){
-  if(dateStr === 'hoje'){
-    const t = new Date();
-    return t.getDate() === day && t.getMonth() === month;
-  }
-  const parts = dateStr.split('/');
-  if(parts.length < 2) return false;
-  return parseInt(parts[0],10) === day && (parseInt(parts[1],10)-1) === month;
+function dayMatches(dateStr, day, month, year){
+  if(!dateStr) return false;
+  const d = new Date(dateStr+'T00:00:00');
+  return d.getDate()===day && d.getMonth()===month && d.getFullYear()===year;
 }
 function renderCalendar(){
   const ws = state.workspaces[state.activeWsId];
@@ -2013,20 +2099,18 @@ function renderCalendar(){
   const daysInMonth = new Date(state.calendarYear, state.calendarMonth+1, 0).getDate();
   const grid = document.getElementById('cal-grid');
   grid.innerHTML = '';
-  for(let i=0;i<firstDay;i++){
-    grid.innerHTML += `<div class="cal-day empty"></div>`;
-  }
+  for(let i=0;i<firstDay;i++){ grid.innerHTML += `<div class="cal-day empty"></div>`; }
   const today = new Date();
   for(let d=1; d<=daysInMonth; d++){
     let items = [];
     if(ws.type === 'individual'){
-      items = ws.transactions.filter(t=>dayMatches(t.date, d, state.calendarMonth));
+      items = ws.transactions.filter(t=>dayMatches(t.date, d, state.calendarMonth, state.calendarYear));
     } else {
-      items = ws.expenses.filter(e=>dayMatches(e.date, d, state.calendarMonth));
+      items = ws.expenses.filter(e=>dayMatches(e.date, d, state.calendarMonth, state.calendarYear));
     }
     const isToday = today.getDate()===d && today.getMonth()===state.calendarMonth && today.getFullYear()===state.calendarYear;
     const dots = items.slice(0,3).map(it=>{
-      const s = statusOf(it.status||'pago');
+      const s = statusOf(it.status||'Pago');
       return `<span style="background:${s.color}"></span>`;
     }).join('');
     const cell = document.createElement('div');
@@ -2035,8 +2119,7 @@ function renderCalendar(){
     if(items.length){ cell.onclick = ()=>openDayList(ws.id, d, items); }
     grid.appendChild(cell);
   }
-  const legend = document.getElementById('cal-legend');
-  legend.innerHTML = state.statusOptions.map(s=>`<span><i style="background:${s.color}"></i>${s.name}</span>`).join('');
+  document.getElementById('cal-legend').innerHTML = state.statusOptions.map(s=>`<span><i style="background:${s.color}"></i>${s.name}</span>`).join('');
 }
 function openDayList(wsId, day, items){
   const ws = state.workspaces[wsId];
@@ -2046,138 +2129,296 @@ function openDayList(wsId, day, items){
   document.getElementById('detail-amount').textContent = items.length + (items.length===1?' lançamento':' lançamentos');
   document.getElementById('detail-amount').style.color = 'var(--ink)';
   const rows = items.map(it=>{
-    const isTx = ws.type === 'individual';
-    const desc = it.desc;
-    const amount = isTx ? it.amount : it.amount;
-    const kind = isTx ? 'tx' : 'expense';
+    const kind = ws.type === 'individual' ? 'tx' : 'expense';
     return `<div class="modal-row" style="cursor:pointer;" onclick="closeDetail(); setTimeout(()=>openDetail('${wsId}','${kind}','${it.id}'),200)">
-      <span class="k">${desc}</span>
-      <span class="v">${fmt(amount)} ${statusTagHTML(it.status||'pago')}</span>
+      <span class="k">${it.desc}</span>
+      <span class="v">${fmt(it.amount)} ${statusTagHTML(it.status||'Pago')}</span>
     </div>`;
   }).join('');
   document.getElementById('detail-rows').innerHTML = rows;
   document.getElementById('detail-split').style.display = 'none';
+  document.getElementById('detail-status-editor').style.display = 'none';
   state.detail = null;
   document.getElementById('detail-modal').classList.add('show');
 }
 
 /* ============================================================
-   EDITAR / EXCLUIR ÁREA
+   MODAL DE DETALHE / EDITAR / DUPLICAR / EXCLUIR / STATUS
    ============================================================ */
-function openEditWs(id){
-  const ws = state.workspaces[id];
-  state.editWsId = id;
-  state.editWsIcon = ws.icon;
-  state.editWsColor = ws.color;
-  document.getElementById('editws-name').value = ws.name;
-  document.getElementById('editws-members-field').style.display = ws.type==='group' ? 'block' : 'none';
-  document.getElementById('editws-share-btn').style.display = ws.type==='group' ? 'block' : 'none';
-  if(ws.type==='group'){
-    document.getElementById('editws-members').value = ws.members.filter(m=>m.id!=='you').map(m=>m.name).join(', ');
-  }
-  renderEditIconSwatches();
-  renderEditColorSwatches();
-  goTo('editws');
-}
-function renderEditIconSwatches(){
-  const el = document.getElementById('editws-icons');
-  el.innerHTML = '';
-  ICONS.forEach(ic=>{
-    const div = document.createElement('div');
-    div.className = 'icon-swatch' + (state.editWsIcon===ic?' selected':'');
-    div.textContent = ic;
-    div.onclick = ()=>{ state.editWsIcon = ic; renderEditIconSwatches(); };
-    el.appendChild(div);
-  });
-}
-function renderEditColorSwatches(){
-  const el = document.getElementById('editws-colors');
-  el.innerHTML = '';
-  COLORS.forEach(c=>{
-    const div = document.createElement('div');
-    div.className = 'swatch' + (state.editWsColor===c?' selected':'');
-    div.style.background = c;
-    div.onclick = ()=>{ state.editWsColor = c; renderEditColorSwatches(); };
-    el.appendChild(div);
-  });
-}
-function saveEditWs(){
-  const ws = state.workspaces[state.editWsId];
-  const name = document.getElementById('editws-name').value.trim();
-  if(!name){ showToast('Dê um nome para a área'); return; }
-  ws.name = name;
-  ws.icon = state.editWsIcon;
-  ws.color = state.editWsColor;
-  if(ws.type === 'group'){
-    const namesRaw = document.getElementById('editws-members').value.trim();
-    const names = namesRaw ? namesRaw.split(',').map(s=>s.trim()).filter(Boolean) : [];
-    const existing = ws.members.filter(m=>m.id==='you');
-    names.forEach((n,i)=>{
-      if(n.toLowerCase()==='você' || n.toLowerCase()==='you') return;
-      const found = ws.members.find(m=>m.name.toLowerCase()===n.toLowerCase());
-      existing.push(found || {id:'m_'+i+'_'+Date.now(), name:n, color: COLORS[(i+1)%COLORS.length]});
-    });
-    ws.members = existing;
-  }
-  showToast('Área atualizada ✓');
-  goTo('settings');
-}
-function confirmDeleteWs(id){
-  const wsId = id || state.editWsId;
+function openDetail(wsId, kind, id){
   const ws = state.workspaces[wsId];
-  if(Object.keys(state.workspaces).length <= 1){
-    showToast('Você precisa ter pelo menos uma área');
-    return;
-  }
-  if(!confirm(`Excluir a área "${ws.name}"? Essa ação não pode ser desfeita.`)) return;
-  delete state.workspaces[wsId];
-  if(state.activeWsId === wsId){
-    state.activeWsId = Object.keys(state.workspaces)[0];
-  }
-  showToast('Área excluída');
-  goTo('settings');
-}
+  state.detail = {wsId, kind, id};
+  const overlay = document.getElementById('detail-modal');
+  document.getElementById('detail-status-editor').style.display = 'none';
 
-/* ============================================================
-   INIT
-   ============================================================ */
-function createCategoryQuick(){
-  const name = prompt('Nome da nova categoria:');
-  if(!name) return;
-  const id = 'cat_'+Date.now();
-  state.categories.push({id, name, icon:'🏷️', color: COLORS[state.categories.length % COLORS.length]});
-  showToast('Categoria "'+name+'" criada ✓');
-  renderCategoriesFull();
+  if(kind === 'tx'){
+    const t = ws.transactions.find(x=>x.id===id);
+    if(!t) return;
+    const cat = ws.categories.find(c=>c.id===t.cat) || {icon:'🏷️', name:'Sem categoria', color:'#766F8C'};
+    const method = ws.paymentMethods.find(m=>m.id===t.method);
+    document.getElementById('detail-icon').style.background = cat.color+'22';
+    document.getElementById('detail-icon').textContent = cat.icon;
+    document.getElementById('detail-title').textContent = t.desc;
+    const amountEl = document.getElementById('detail-amount');
+    amountEl.textContent = fmt(t.amount);
+    amountEl.style.color = t.amount<0 ? 'var(--coral)' : 'var(--teal)';
+    document.getElementById('detail-rows').innerHTML = `
+      <div class="modal-row"><span class="k">Área</span><span class="v">${ws.icon} ${ws.name}</span></div>
+      <div class="modal-row"><span class="k">Categoria</span><span class="v">${cat.icon} ${cat.name}</span></div>
+      <div class="modal-row"><span class="k">Meio de pagamento</span><span class="v">${method ? method.icon+' '+method.name : '—'}</span></div>
+      <div class="modal-row"><span class="k">Data</span><span class="v">${t.date}</span></div>
+      <div class="modal-row status-row-clickable" onclick="toggleStatusEditor()"><span class="k">Status</span><span class="v">${statusTagHTML(t.status||'Pago')}</span></div>
+      ${t.recurring ? `<div class="modal-row"><span class="k">Recorrência</span><span class="v">${recurringTagHTML(t.recurring)}</span></div>` : ''}
+      ${t.note ? `<div class="modal-row"><span class="k">Observação</span><span class="v">${t.note}</span></div>` : ''}
+    `;
+    document.getElementById('detail-split').style.display = 'none';
+  } else {
+    const e = ws.expenses.find(x=>x.id===id);
+    if(!e) return;
+    const payerObj = ws.members.find(m=>m.id===e.payer) || {name:'Alguém', color:'#766F8C'};
+    const respObj = ws.members.find(m=>m.id===e.responsavel) || payerObj;
+    document.getElementById('detail-icon').style.background = ws.color+'22';
+    document.getElementById('detail-icon').textContent = ws.icon;
+    document.getElementById('detail-title').textContent = e.desc;
+    const amountEl = document.getElementById('detail-amount');
+    amountEl.textContent = fmt(e.amount);
+    amountEl.style.color = 'var(--ink)';
+    document.getElementById('detail-rows').innerHTML = `
+      <div class="modal-row"><span class="k">Grupo</span><span class="v">${ws.icon} ${ws.name}</span></div>
+      <div class="modal-row"><span class="k">Pago por</span><span class="v"><div class="avatar" style="width:20px;height:20px;font-size:10px;background:${payerObj.color}">${payerObj.name[0]}</div>${payerObj.name}</span></div>
+      <div class="modal-row"><span class="k">Responsável</span><span class="v"><div class="avatar" style="width:20px;height:20px;font-size:10px;background:${respObj.color}">${respObj.name[0]}</div>${respObj.name}</span></div>
+      <div class="modal-row"><span class="k">Data</span><span class="v">${e.date}</span></div>
+      <div class="modal-row status-row-clickable" onclick="toggleStatusEditor()"><span class="k">Status</span><span class="v">${statusTagHTML(e.status||'Pago')}</span></div>
+      ${e.note ? `<div class="modal-row"><span class="k">Observação</span><span class="v">${e.note}</span></div>` : ''}
+    `;
+    document.getElementById('detail-split').style.display = 'block';
+    const splitEl = document.getElementById('detail-split-list');
+    splitEl.innerHTML = '';
+    ws.members.forEach(m=>{
+      const share = e.split[m.id] || 0;
+      if(share === 0) return;
+      splitEl.innerHTML += `
+        <div class="split-detail-row">
+          <span class="who"><div class="avatar" style="width:22px;height:22px;font-size:10px;background:${m.color}">${m.name[0]}</div>${m.name}</span>
+          <span>${fmt(share)}</span>
+        </div>`;
+    });
+  }
+  overlay.classList.add('show');
 }
-
-/* ============================================================
-   PERSISTÊNCIA LOCAL (salva no próprio aparelho)
-   ============================================================ */
-function saveLocal(){
-  try{
-    localStorage.setItem('contaai_state', JSON.stringify({
-      workspaces: state.workspaces,
-      categories: state.categories,
-      statusOptions: state.statusOptions,
-      activeWsId: state.activeWsId,
+function closeDetail(){
+  document.getElementById('detail-modal').classList.remove('show');
+  state.detail = null;
+}
+function toggleStatusEditor(){
+  const el = document.getElementById('detail-status-editor');
+  const showing = el.style.display === 'block';
+  if(showing){ el.style.display = 'none'; return; }
+  el.innerHTML = `<div class="status-pick-row">${state.statusOptions.map(s=>
+    `<div class="status-chip-pick" style="background:${s.color}; color:white; border-color:transparent;" onclick="applyStatusChange('${s.name}')"><span class="sdot" style="background:white"></span>${s.name}</div>`
+  ).join('')}</div>`;
+  el.style.display = 'block';
+}
+async function applyStatusChange(newStatusName){
+  if(!state.detail) return;
+  const {wsId, kind, id} = state.detail;
+  const table = kind === 'tx' ? 'transactions' : 'group_expenses';
+  const { error } = await sb.from(table).update({status:newStatusName}).eq('id', id);
+  if(error){ showToast('Erro: '+error.message); return; }
+  await ensureWorkspaceLoaded(wsId);
+  showToast('Status atualizado ✓');
+  openDetail(wsId, kind, id);
+  if(state.activeWsId === wsId) renderDashboard();
+}
+async function duplicateCurrentTx(){
+  if(!state.detail) return;
+  const {wsId, kind, id} = state.detail;
+  const ws = state.workspaces[wsId];
+  const today = new Date().toISOString().slice(0,10);
+  let error;
+  if(kind === 'tx'){
+    const t = ws.transactions.find(x=>x.id===id);
+    ({ error } = await sb.from('transactions').insert({
+      workspace_id: wsId, description:t.desc, category_id:t.cat, amount:t.amount, type:t.type,
+      method_id:t.method, occurred_on:today, note:t.note, status:t.status, recurring:t.recurring, created_by: currentUser.id,
     }));
-  }catch(e){ console.warn('Não foi possível salvar localmente', e); }
+  } else {
+    const e = ws.expenses.find(x=>x.id===id);
+    ({ error } = await sb.from('group_expenses').insert({
+      workspace_id: wsId, description:e.desc, amount:e.amount, payer_id:e.payer, responsavel_id:e.responsavel,
+      occurred_on:today, split:e.split, status:e.status, note:e.note, created_by: currentUser.id,
+    }));
+  }
+  if(error){ showToast('Erro: '+error.message); return; }
+  showToast('Duplicado ✓');
+  closeDetail();
+  await ensureWorkspaceLoaded(wsId);
+  if(state.activeWsId === wsId) renderDashboard();
 }
-function loadLocal(){
-  try{
-    const raw = localStorage.getItem('contaai_state');
-    if(!raw) return;
-    const saved = JSON.parse(raw);
-    if(saved.workspaces) state.workspaces = saved.workspaces;
-    if(saved.categories) state.categories = saved.categories;
-    if(saved.statusOptions) state.statusOptions = saved.statusOptions;
-    if(saved.activeWsId && state.workspaces[saved.activeWsId]) state.activeWsId = saved.activeWsId;
-  }catch(e){ console.warn('Não foi possível carregar dados salvos', e); }
+async function deleteCurrentTx(){
+  if(!state.detail) return;
+  const {wsId, kind, id} = state.detail;
+  const table = kind === 'tx' ? 'transactions' : 'group_expenses';
+  const { error } = await sb.from(table).delete().eq('id', id);
+  if(error){ showToast('Erro: '+error.message); return; }
+  showToast('Excluído');
+  closeDetail();
+  await ensureWorkspaceLoaded(wsId);
+  if(state.activeWsId === wsId) renderDashboard();
 }
-window.addEventListener('beforeunload', saveLocal);
+function editCurrentTx(){
+  if(!state.detail) return;
+  const {wsId, kind, id} = state.detail;
+  closeDetail();
+  if(kind === 'tx') openEditTx(wsId, id);
+  else openEditExpense(wsId, id);
+}
+function openEditTx(wsId, id){
+  state.activeWsId = wsId;
+  const ws = state.workspaces[wsId];
+  const t = ws.transactions.find(x=>x.id===id);
+  state.editingTxId = id;
+  state.editingExpenseId = null;
+  state.txType = t.type;
+  state.selectedCategory = t.cat;
+  state.selectedStatus = t.status || 'Pago';
+  state.selectedRecurring = t.recurring || '';
+  document.getElementById('tx-amount').value = Math.abs(t.amount);
+  document.getElementById('tx-desc').value = t.desc;
+  document.getElementById('tx-note').value = t.note || '';
+  document.getElementById('amount-display').textContent = fmt(Math.abs(t.amount));
+  document.getElementById('tx-date').value = t.date || new Date().toISOString().slice(0,10);
+  document.getElementById('toggle-expense').classList.toggle('active', t.type==='expense');
+  document.getElementById('toggle-income').classList.toggle('active', t.type==='income');
+  renderCatPickGrid();
+  renderAccountSelect();
+  if(t.method) document.getElementById('tx-account').value = t.method;
+  renderStatusPicker('tx-status-row', 'selectedStatus');
+  renderRecurringRow();
+  document.getElementById('add-title').textContent = 'Editar transação';
+  goTo('add');
+}
+function openEditExpense(wsId, id){
+  state.activeWsId = wsId;
+  const ws = state.workspaces[wsId];
+  const e = ws.expenses.find(x=>x.id===id);
+  state.editingExpenseId = id;
+  state.editingTxId = null;
+  state.selectedPayer = e.payer;
+  state.selectedResponsavel = e.responsavel || e.payer;
+  state.selectedStatus = e.status || 'Pago';
+  state.splitType = 'custom';
+  document.getElementById('g-amount').value = e.amount;
+  document.getElementById('g-desc').value = e.desc;
+  document.getElementById('g-note').value = e.note || '';
+  document.getElementById('split-equal').classList.remove('active');
+  document.getElementById('split-custom').classList.add('active');
+  renderPayerSelect();
+  renderResponsavelSelect();
+  renderSplit();
+  document.querySelectorAll('#split-list input').forEach(inp=>{
+    const mid = inp.dataset.member;
+    inp.value = (e.split[mid]||0).toFixed(2);
+  });
+  renderStatusPicker('g-status-row', 'selectedStatus');
+  document.getElementById('add-group-title').textContent = 'Editar despesa';
+  goTo('add-group');
+}
 
 /* ============================================================
-   PWA: registrar service worker (permite instalar na tela inicial)
+   CONFIGURAÇÕES
+   ============================================================ */
+function renderSettings(){
+  const el = document.getElementById('settings-ws-list');
+  el.innerHTML = '';
+  Object.values(state.workspaces).forEach(ws=>{
+    const row = document.createElement('div');
+    row.className = 'list-row';
+    row.style.flexDirection = 'column';
+    row.style.alignItems = 'stretch';
+    row.innerHTML = `
+      <div style="display:flex; align-items:center; gap:12px; cursor:pointer;" onclick="selectWorkspace('${ws.id}')">
+        <div class="chip-icon" style="background:${ws.color}22">${ws.icon}</div>
+        <div class="meta"><div class="title">${ws.name}</div><div class="desc">${ws.type==='individual'?'Individual':'Compartilhada · '+ws.members.length+' membro'+(ws.members.length===1?'':'s')} · ${ws.currency}</div></div>
+        <div class="value" style="color:var(--muted); font-size:13px;">›</div>
+      </div>
+      <div class="ws-actions-row">
+        <div class="ws-act edit" onclick="openEditWs('${ws.id}')">✏️ Editar</div>
+        <div class="ws-act del" onclick="confirmDeleteWs('${ws.id}')">🗑️ Excluir</div>
+      </div>
+    `;
+    el.appendChild(row);
+  });
+  const out = document.createElement('div');
+  out.className = 'list-row';
+  out.onclick = signOut;
+  out.innerHTML = `<div class="chip-icon" style="background:var(--coral-soft)">🚪</div><div class="meta"><div class="title">Sair da conta</div><div class="desc">${currentUser ? currentUser.email : ''}</div></div>`;
+  el.appendChild(out);
+}
+
+/* ============================================================
+   PREFERÊNCIAS LOCAIS: TEMA / PRIVACIDADE / EXPORTAR
+   ============================================================ */
+function applyLocalPrefs(){
+  try{
+    const theme = localStorage.getItem('contaai_theme');
+    if(theme === 'dark') applyTheme('dark');
+    const priv = localStorage.getItem('contaai_privacy');
+    if(priv === '1') applyPrivacy(true);
+  }catch(e){}
+}
+function applyTheme(mode){
+  document.body.classList.toggle('theme-dark', mode === 'dark');
+  const desc = document.getElementById('theme-desc');
+  if(desc) desc.textContent = mode === 'dark' ? 'Escuro · Roxo' : 'Claro · Roxo';
+  localStorage.setItem('contaai_theme', mode);
+}
+function toggleTheme(){
+  const isDark = document.body.classList.contains('theme-dark');
+  applyTheme(isDark ? 'light' : 'dark');
+  showToast(isDark ? 'Tema claro ativado' : 'Tema escuro ativado');
+}
+function applyPrivacy(on){
+  document.body.classList.toggle('privacy-on', on);
+  const desc = document.getElementById('privacy-desc');
+  if(desc) desc.textContent = on ? 'Modo privacidade ativado · toque em um valor pra revelar' : 'Modo privacidade desativado';
+  localStorage.setItem('contaai_privacy', on ? '1' : '0');
+}
+function togglePrivacy(){
+  const on = !document.body.classList.contains('privacy-on');
+  applyPrivacy(on);
+  showToast(on ? 'Saldos ocultos ✓' : 'Saldos visíveis novamente');
+}
+function exportDataCSV(){
+  const rows = [['Área','Tipo','Descrição','Categoria / Pago por','Valor','Data','Status']];
+  Object.values(state.workspaces).forEach(ws=>{
+    if(ws.type === 'individual'){
+      ws.transactions.forEach(t=>{
+        const cat = ws.categories.find(c=>c.id===t.cat);
+        rows.push([ws.name, t.type==='income'?'Receita':'Despesa', t.desc, cat?cat.name:'', t.amount.toFixed(2).replace('.',','), t.date, statusOf(t.status||'Pago').name]);
+      });
+    } else {
+      ws.expenses.forEach(e=>{
+        const payer = ws.members.find(m=>m.id===e.payer);
+        rows.push([ws.name, 'Despesa de grupo', e.desc, payer?payer.name:'', e.amount.toFixed(2).replace('.',','), e.date, statusOf(e.status||'Pago').name]);
+      });
+    }
+  });
+  const csv = rows.map(r => r.map(field => `"${String(field).replace(/"/g,'""')}"`).join(';')).join('\n');
+  const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'contaai-dados.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('CSV exportado ✓');
+}
+
+/* ============================================================
+   PWA: registrar service worker
    ============================================================ */
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{
@@ -2185,9 +2426,10 @@ if('serviceWorker' in navigator){
   });
 }
 
-loadLocal();
-renderWorkspaces();
-renderDashboard();
+/* ============================================================
+   INIT
+   ============================================================ */
+initApp();
 </script>
 </body>
 </html>

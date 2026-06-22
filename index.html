@@ -1154,14 +1154,11 @@ async function createWorkspace(){
   if(!name){ showToast('Dê um nome para a área'); return; }
   const currency = document.getElementById('newws-currency').value;
   showLoading(true);
-  const { data: ws, error } = await sb.from('workspaces').insert({
-    name, type: state.newWsType, icon: state.newWsIcon, color: state.newWsColor, currency, owner_id: currentUser.id
-  }).select().single();
-  if(error){ showLoading(false); showToast('Erro: '+error.message); return; }
 
-  await sb.from('workspace_members').insert({
-    workspace_id: ws.id, user_id: currentUser.id, display_name: myProfileName, color: state.newWsColor, role:'owner'
+  const { data: wsId, error } = await sb.rpc('create_workspace_with_owner', {
+    p_name: name, p_type: state.newWsType, p_icon: state.newWsIcon, p_color: state.newWsColor, p_currency: currency
   });
+  if(error){ showLoading(false); showToast('Erro: '+error.message); return; }
 
   if(state.newWsType === 'individual'){
     const defaultCats = [
@@ -1172,17 +1169,17 @@ async function createWorkspace(){
       {name:'Saúde', icon:'💊', color:'#16A893'},
       {name:'Outros', icon:'•••', color:'#766F8C'},
     ];
-    await sb.from('categories').insert(defaultCats.map(c=>({...c, workspace_id: ws.id})));
+    await sb.from('categories').insert(defaultCats.map(c=>({...c, workspace_id: wsId})));
     const defaultMethods = [
       {name:'Pix', icon:'⚡', color:'#16A893'},
       {name:'Dinheiro', icon:'💵', color:'#E7A532'},
     ];
-    await sb.from('payment_methods').insert(defaultMethods.map(m=>({...m, workspace_id: ws.id})));
+    await sb.from('payment_methods').insert(defaultMethods.map(m=>({...m, workspace_id: wsId})));
   }
 
-  state.workspaces[ws.id] = { id:ws.id, name:ws.name, icon:ws.icon, color:ws.color, currency:ws.currency, type:ws.type, owner_id:ws.owner_id, members:[], categories:[], paymentMethods:[], transactions:[], expenses:[] };
-  await ensureWorkspaceLoaded(ws.id);
-  state.activeWsId = ws.id;
+  state.workspaces[wsId] = { id:wsId, name, icon:state.newWsIcon, color:state.newWsColor, currency, type:state.newWsType, owner_id:currentUser.id, members:[], categories:[], paymentMethods:[], transactions:[], expenses:[] };
+  await ensureWorkspaceLoaded(wsId);
+  state.activeWsId = wsId;
   showLoading(false);
   showToast('Área "'+name+'" criada ✓');
   goTo('dashboard');

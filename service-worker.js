@@ -1,4 +1,4 @@
-const CACHE_NAME = 'contaai-cache-v1';
+const CACHE_NAME = 'contaai-cache-v2';
 const FILES_TO_CACHE = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (event) => {
@@ -17,8 +17,16 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+// Network-first: sempre tenta buscar a versão mais nova primeiro,
+// só usa o cache se estiver sem internet.
 self.addEventListener('fetch', (event) => {
   event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request))
+    fetch(event.request)
+      .then((response) => {
+        const copy = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        return response;
+      })
+      .catch(() => caches.match(event.request))
   );
 });

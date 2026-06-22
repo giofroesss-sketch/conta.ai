@@ -1314,6 +1314,7 @@ function goTo(screen){
 
 function openAdd(){
   const ws = state.workspaces[state.activeWsId];
+  if(!ws){ showToast('Área não encontrada — atualizando lista...'); loadMyWorkspaces(); return; }
   state.editingTxId = null;
   state.editingExpenseId = null;
   if(ws.type === 'group'){
@@ -1442,6 +1443,7 @@ function renderWorkspaces(){
 function renderDashboard(){
   if(!state.activeWsId){ return; }
   const ws = state.workspaces[state.activeWsId];
+  if(!ws){ showToast('Área não encontrada — atualizando lista...'); loadMyWorkspaces(); return; }
   if(!ws) return;
   document.getElementById('dash-name').textContent = ws.name;
   const dot = document.getElementById('dash-dot');
@@ -1657,6 +1659,7 @@ function syncAmount(){
 }
 function renderCatPickGrid(){
   const ws = state.workspaces[state.activeWsId];
+  if(!ws){ showToast('Área não encontrada — atualizando lista...'); loadMyWorkspaces(); return; }
   const el = document.getElementById('cat-pick-grid');
   el.innerHTML = '';
   ws.categories.forEach(c=>{
@@ -1682,6 +1685,7 @@ function renderCatPickGrid(){
 }
 function renderAccountSelect(){
   const ws = state.workspaces[state.activeWsId];
+  if(!ws){ showToast('Área não encontrada — atualizando lista...'); loadMyWorkspaces(); return; }
   const sel = document.getElementById('tx-account');
   sel.innerHTML = '';
   if(ws.paymentMethods.length === 0){
@@ -1694,6 +1698,8 @@ function renderAccountSelect(){
 }
 async function saveTransaction(){
   const ws = state.workspaces[state.activeWsId];
+  if(!ws){ showToast('Área não encontrada — atualizando lista...'); loadMyWorkspaces(); return; }
+  const wsId = ws.id;
   const amount = parseFloat(document.getElementById('tx-amount').value);
   if(!amount){ showToast('Informe um valor válido'); return; }
   const desc = document.getElementById('tx-desc').value || 'Transação';
@@ -1704,7 +1710,7 @@ async function saveTransaction(){
   const signedAmount = state.txType === 'expense' ? -Math.abs(amount) : Math.abs(amount);
 
   const payload = {
-    workspace_id: ws.id, description:desc, category_id:cat, amount:signedAmount, type:state.txType,
+    workspace_id: wsId, description:desc, category_id:cat, amount:signedAmount, type:state.txType,
     method_id: method, occurred_on: dateVal, note, status:state.selectedStatus, recurring:state.selectedRecurring||null,
     created_by: currentUser.id,
   };
@@ -1718,7 +1724,8 @@ async function saveTransaction(){
   }
   if(error){ showLoading(false); showToast('Erro: '+error.message); return; }
   state.editingTxId = null;
-  await ensureWorkspaceLoaded(ws.id);
+  await ensureWorkspaceLoaded(wsId);
+  state.activeWsId = wsId;
   showLoading(false);
   showToast('Transação salva ✓');
   goTo('dashboard');
@@ -1729,6 +1736,7 @@ async function saveTransaction(){
    ============================================================ */
 function resetGroupForm(){
   const ws = state.workspaces[state.activeWsId];
+  if(!ws){ showToast('Área não encontrada — atualizando lista...'); loadMyWorkspaces(); return; }
   state.selectedPayer = currentUser.id;
   state.selectedResponsavel = currentUser.id;
   state.selectedStatus = 'Pago';
@@ -1745,6 +1753,7 @@ function resetGroupForm(){
 }
 function renderPayerSelect(){
   const ws = state.workspaces[state.activeWsId];
+  if(!ws){ showToast('Área não encontrada — atualizando lista...'); loadMyWorkspaces(); return; }
   const el = document.getElementById('payer-select');
   el.innerHTML = '';
   ws.members.forEach(m=>{
@@ -1757,6 +1766,7 @@ function renderPayerSelect(){
 }
 function renderResponsavelSelect(){
   const ws = state.workspaces[state.activeWsId];
+  if(!ws){ showToast('Área não encontrada — atualizando lista...'); loadMyWorkspaces(); return; }
   const el = document.getElementById('responsavel-select');
   el.innerHTML = '';
   ws.members.forEach(m=>{
@@ -1775,6 +1785,7 @@ function setSplitType(type){
 }
 function renderSplit(){
   const ws = state.workspaces[state.activeWsId];
+  if(!ws){ showToast('Área não encontrada — atualizando lista...'); loadMyWorkspaces(); return; }
   const total = parseFloat(document.getElementById('g-amount').value) || 0;
   const el = document.getElementById('split-list');
   el.innerHTML = '';
@@ -1789,6 +1800,8 @@ function renderSplit(){
 }
 async function saveGroupExpense(){
   const ws = state.workspaces[state.activeWsId];
+  if(!ws){ showToast('Área não encontrada — atualizando lista...'); loadMyWorkspaces(); return; }
+  const wsId = ws.id;
   const amount = parseFloat(document.getElementById('g-amount').value);
   if(!amount){ showToast('Informe um valor válido'); return; }
   const desc = document.getElementById('g-desc').value || 'Despesa do grupo';
@@ -1797,7 +1810,7 @@ async function saveGroupExpense(){
   document.querySelectorAll('#split-list input').forEach(inp=>{ split[inp.dataset.member] = parseFloat(inp.value) || 0; });
 
   const payload = {
-    workspace_id: ws.id, description:desc, amount, payer_id: state.selectedPayer, responsavel_id: state.selectedResponsavel,
+    workspace_id: wsId, description:desc, amount, payer_id: state.selectedPayer, responsavel_id: state.selectedResponsavel,
     split, status: state.selectedStatus, note, created_by: currentUser.id,
   };
 
@@ -1811,7 +1824,8 @@ async function saveGroupExpense(){
   }
   if(error){ showLoading(false); showToast('Erro: '+error.message); return; }
   state.editingExpenseId = null;
-  await ensureWorkspaceLoaded(ws.id);
+  await ensureWorkspaceLoaded(wsId);
+  state.activeWsId = wsId;
   showLoading(false);
   showToast('Despesa salva ✓');
   goTo('dashboard');
@@ -1822,6 +1836,7 @@ async function saveGroupExpense(){
    ============================================================ */
 function renderSettle(){
   const ws = state.workspaces[state.activeWsId];
+  if(!ws){ showToast('Área não encontrada — atualizando lista...'); loadMyWorkspaces(); return; }
   const el = document.getElementById('settle-list');
   el.innerHTML = '';
   let any = false;
@@ -1843,6 +1858,7 @@ function renderSettle(){
 }
 async function settleMember(memberId){
   const ws = state.workspaces[state.activeWsId];
+  if(!ws){ showToast('Área não encontrada — atualizando lista...'); loadMyWorkspaces(); return; }
   const net = memberNet(ws, memberId);
   let payload = null;
   const today = new Date().toISOString().slice(0,10);
@@ -1865,6 +1881,7 @@ async function settleMember(memberId){
    ============================================================ */
 function renderAccountsFull(){
   const ws = state.workspaces[state.activeWsId];
+  if(!ws){ showToast('Área não encontrada — atualizando lista...'); loadMyWorkspaces(); return; }
   const el = document.getElementById('accounts-full');
   el.innerHTML = '';
   if(ws.type !== 'individual'){
@@ -1917,6 +1934,7 @@ function renderMethodColorSwatches(){
 }
 async function saveNewMethod(){
   const ws = state.workspaces[state.activeWsId];
+  if(!ws){ showToast('Área não encontrada — atualizando lista...'); loadMyWorkspaces(); return; }
   const name = document.getElementById('newmethod-name').value.trim();
   if(!name){ showToast('Dê um nome para o meio de pagamento'); return; }
   const { data, error } = await sb.from('payment_methods').insert({workspace_id: ws.id, name, icon:state.newMethodIcon, color:state.newMethodColor}).select().single();
@@ -1931,6 +1949,7 @@ async function saveNewMethod(){
    ============================================================ */
 function renderCategoriesFull(){
   const ws = state.workspaces[state.activeWsId];
+  if(!ws){ showToast('Área não encontrada — atualizando lista...'); loadMyWorkspaces(); return; }
   const el = document.getElementById('cat-grid-full');
   el.innerHTML = '';
   if(ws.type !== 'individual'){
@@ -1952,6 +1971,7 @@ function renderCategoriesFull(){
 }
 async function createCategoryQuick(){
   const ws = state.workspaces[state.activeWsId];
+  if(!ws){ showToast('Área não encontrada — atualizando lista...'); loadMyWorkspaces(); return; }
   const name = prompt('Nome da nova categoria:');
   if(!name) return;
   const { data, error } = await sb.from('categories').insert({workspace_id: ws.id, name, icon:'🏷️', color: COLORS[ws.categories.length % COLORS.length]}).select().single();
@@ -1988,6 +2008,7 @@ function openCategoryDetail(wsId, catId){
    ============================================================ */
 function renderReports(){
   const ws = state.workspaces[state.activeWsId];
+  if(!ws){ showToast('Área não encontrada — atualizando lista...'); loadMyWorkspaces(); return; }
   if(ws.type === 'individual'){
     renderBars('bars-full', computeBars(ws));
     const totals = categorySpend(ws, false);
@@ -2019,6 +2040,7 @@ function renderReports(){
 }
 function renderGroupHistoryFull(){
   const ws = state.workspaces[state.activeWsId];
+  if(!ws){ showToast('Área não encontrada — atualizando lista...'); loadMyWorkspaces(); return; }
   const el = document.getElementById('group-history-full');
   el.innerHTML = '';
   ws.expenses.forEach(e=>{
@@ -2086,6 +2108,7 @@ function dayMatches(dateStr, day, month, year){
 }
 function renderCalendar(){
   const ws = state.workspaces[state.activeWsId];
+  if(!ws){ showToast('Área não encontrada — atualizando lista...'); loadMyWorkspaces(); return; }
   document.getElementById('cal-current-label').textContent = MONTH_NAMES[state.calendarMonth];
   const prevIdx = state.calendarMonth===0 ? 11 : state.calendarMonth-1;
   const nextIdx = state.calendarMonth===11 ? 0 : state.calendarMonth+1;

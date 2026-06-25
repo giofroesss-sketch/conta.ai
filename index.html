@@ -649,7 +649,7 @@ body.privacy-on .amt:active{
     <div class="field"><label>Meio de pagamento</label>
       <select id="tx-account"></select>
     </div>
-    <div class="field"><label>Data</label><input type="date" id="tx-date"></div>
+    <div class="field"><label>Data</label><input type="date" id="tx-date" oninput="updateRepeatPreview()"></div>
 
     <label style="font-size:12px; font-weight:600; color:var(--muted); display:block; margin-bottom:8px;">Status</label>
     <div class="status-pick-row" id="tx-status-row"></div>
@@ -659,6 +659,21 @@ body.privacy-on .amt:active{
       <div class="opt" data-val="">Pontual</div>
       <div class="opt" data-val="fixa">Fixa</div>
       <div class="opt" data-val="variavel">Variável</div>
+    </div>
+
+    <div id="tx-repeat-section">
+      <label style="font-size:12px; font-weight:600; color:var(--muted); display:block; margin-bottom:8px;">Repetir este lançamento? <span style="color:var(--violet-1); font-weight:700;">(útil para contas parceladas)</span></label>
+      <div class="recurring-toggle" id="tx-repeat-row">
+        <div class="opt active" data-val="">Não repete</div>
+        <div class="opt" data-val="daily">Diário</div>
+        <div class="opt" data-val="weekly">Semanal</div>
+        <div class="opt" data-val="monthly">Mensal</div>
+      </div>
+      <div class="field" id="tx-repeat-count-field" style="display:none;">
+        <label>Repetir por quantas vezes (incluindo esta)</label>
+        <input type="number" id="tx-repeat-count" placeholder="Ex: 3" min="2" max="60" oninput="updateRepeatPreview()">
+        <p class="sub" id="tx-repeat-preview" style="margin-top:8px; margin-bottom:0;"></p>
+      </div>
     </div>
 
     <div class="field"><label>Observação (opcional)</label><textarea id="tx-note" rows="2" placeholder="Anote algum detalhe sobre essa transação..."></textarea></div>
@@ -911,6 +926,7 @@ let state = {
   selectedResponsavel: null,
   selectedStatus: 'Pago',
   selectedRecurring: '',
+  selectedRepeatFreq: '',
   newWsType: 'individual',
   newWsIcon: ICONS[0],
   newWsColor: COLORS[0],
@@ -1335,11 +1351,11 @@ function openSettle(){
 /* ============================================================
    CÁLCULOS DERIVADOS (lidos do cache local já carregado do banco)
    ============================================================ */
-function wsBalance(ws){ return ws.transactions.reduce((s,t)=>s+t.amount, 0); }
+function wsBalance(ws){ return ws.transactions.filter(t=>(t.status||'Pago')==='Pago').reduce((s,t)=>s+t.amount, 0); }
 function categorySpend(ws, monthOnly){
   const now = new Date(); const ym = now.toISOString().slice(0,7);
   const totals = {};
-  ws.transactions.filter(t=>t.amount<0 && (!monthOnly || (t.date && t.date.slice(0,7)===ym))).forEach(t=>{
+  ws.transactions.filter(t=>t.amount<0 && (t.status||'Pago')==='Pago' && (!monthOnly || (t.date && t.date.slice(0,7)===ym))).forEach(t=>{
     totals[t.cat] = (totals[t.cat]||0) + Math.abs(t.amount);
   });
   return totals;
@@ -1354,7 +1370,7 @@ function computeBars(ws){
   return months.map(m=>{
     let income=0, expense=0;
     ws.transactions.forEach(t=>{
-      if(t.date && t.date.slice(0,7)===m.ym){
+      if((t.status||'Pago')==='Pago' && t.date && t.date.slice(0,7)===m.ym){
         if(t.amount>0) income+=t.amount; else expense+=Math.abs(t.amount);
       }
     });
@@ -1363,7 +1379,7 @@ function computeBars(ws){
 }
 function groupNetForYou(ws){
   let net = 0;
-  ws.expenses.forEach(e=>{
+  ws.expenses.filter(e=>(e.status||'Pago')==='Pago').forEach(e=>{
     const yourShare = e.split[currentUser.id] || 0;
     if(e.payer === currentUser.id){ net += (e.amount - yourShare); }
     else { net -= yourShare; }
@@ -1372,7 +1388,7 @@ function groupNetForYou(ws){
 }
 function memberNet(ws, memberId){
   let net = 0;
-  ws.expenses.forEach(e=>{
+  ws.expenses.filter(e=>(e.status||'Pago')==='Pago').forEach(e=>{
     const theirShare = e.split[memberId] || 0;
     const yourShare = e.split[currentUser.id] || 0;
     if(e.payer === currentUser.id && memberId !== currentUser.id) net += theirShare;
@@ -1466,7 +1482,7 @@ function renderDashboard(){
     `;
     const now = new Date(); const ym = now.toISOString().slice(0,7);
     let monthIncome=0, monthExpense=0;
-    ws.transactions.forEach(t=>{ if(t.date && t.date.slice(0,7)===ym){ if(t.amount>0) monthIncome+=t.amount; else monthExpense+=Math.abs(t.amount); }});
+    ws.transactions.forEach(t=>{ if((t.status||'Pago')==='Pago' && t.date && t.date.slice(0,7)===ym){ if(t.amount>0) monthIncome+=t.amount; else monthExpense+=Math.abs(t.amount); }});
     document.getElementById('ind-income').textContent = fmtShort(monthIncome);
     document.getElementById('ind-expense').textContent = fmtShort(monthExpense);
     renderBars('bars', computeBars(ws));
@@ -1511,7 +1527,7 @@ function renderAccountsPreview(ws){
     el.innerHTML = `<div class="method-chip" onclick="goTo('accounts')">+ adicionar meio de pagamento</div>`;
   }
   ws.paymentMethods.forEach(m=>{
-    const spent = ws.transactions.filter(t=>t.method===m.id && t.amount<0).reduce((s,t)=>s+Math.abs(t.amount),0);
+    const spent = ws.transactions.filter(t=>t.method===m.id && t.amount<0 && (t.status||'Pago')==='Pago').reduce((s,t)=>s+Math.abs(t.amount),0);
     el.innerHTML += `
       <div class="method-chip" onclick="goTo('accounts')">
         <span class="ic" style="background:${m.color}22">${m.icon}</span>
@@ -1607,9 +1623,13 @@ function resetTxForm(){
   state.selectedCategory = null;
   state.selectedStatus = 'Pago';
   state.selectedRecurring = '';
+  state.selectedRepeatFreq = '';
   document.getElementById('tx-amount').value = '';
   document.getElementById('tx-desc').value = '';
   document.getElementById('tx-note').value = '';
+  document.getElementById('tx-repeat-count').value = '';
+  document.getElementById('tx-repeat-preview').textContent = '';
+  document.getElementById('tx-repeat-section').style.display = 'block';
   document.getElementById('amount-display').textContent = 'R$ 0';
   document.getElementById('tx-date').value = new Date().toISOString().slice(0,10);
   document.getElementById('toggle-expense').classList.toggle('active', state.txType==='expense');
@@ -1618,6 +1638,7 @@ function resetTxForm(){
   renderAccountSelect();
   renderStatusPicker('tx-status-row', 'selectedStatus');
   renderRecurringRow();
+  renderRepeatRow();
 }
 function renderStatusPicker(containerId, stateKey){
   const el = document.getElementById(containerId);
@@ -1647,6 +1668,38 @@ function renderRecurringRow(){
     opt.classList.toggle('active', opt.dataset.val === state.selectedRecurring);
     opt.onclick = ()=>{ state.selectedRecurring = opt.dataset.val; renderRecurringRow(); };
   });
+}
+function renderRepeatRow(){
+  document.querySelectorAll('#tx-repeat-row .opt').forEach(opt=>{
+    opt.classList.toggle('active', opt.dataset.val === state.selectedRepeatFreq);
+    opt.onclick = ()=>{ state.selectedRepeatFreq = opt.dataset.val; renderRepeatRow(); updateRepeatPreview(); };
+  });
+  document.getElementById('tx-repeat-count-field').style.display = state.selectedRepeatFreq ? 'block' : 'none';
+}
+function formatDateShort(iso){
+  const [y,m,d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+function computeOccurrenceDates(startDate, freq, count){
+  const dates = [];
+  for(let i=0;i<count;i++){
+    const d = new Date(startDate+'T00:00:00');
+    if(freq === 'daily') d.setDate(d.getDate()+i);
+    else if(freq === 'weekly') d.setDate(d.getDate()+i*7);
+    else if(freq === 'monthly') d.setMonth(d.getMonth()+i);
+    dates.push(d.toISOString().slice(0,10));
+  }
+  return dates;
+}
+function updateRepeatPreview(){
+  const freq = state.selectedRepeatFreq;
+  const count = parseInt(document.getElementById('tx-repeat-count').value) || 0;
+  const preview = document.getElementById('tx-repeat-preview');
+  if(!freq || count < 2){ preview.textContent = ''; return; }
+  const dateVal = document.getElementById('tx-date').value || new Date().toISOString().slice(0,10);
+  const dates = computeOccurrenceDates(dateVal, freq, count);
+  const freqLabel = freq==='daily' ? 'todo dia' : freq==='weekly' ? 'toda semana' : 'todo mês';
+  preview.textContent = `Vai criar ${count} lançamentos, ${freqLabel}, de ${formatDateShort(dates[0])} até ${formatDateShort(dates[dates.length-1])}.`;
 }
 function setTxType(type){
   state.txType = type;
@@ -1709,18 +1762,34 @@ async function saveTransaction(){
   const dateVal = document.getElementById('tx-date').value || new Date().toISOString().slice(0,10);
   const signedAmount = state.txType === 'expense' ? -Math.abs(amount) : Math.abs(amount);
 
-  const payload = {
-    workspace_id: wsId, description:desc, category_id:cat, amount:signedAmount, type:state.txType,
-    method_id: method, occurred_on: dateVal, note, status:state.selectedStatus, recurring:state.selectedRecurring||null,
+  const basePayload = {
+    workspace_id: wsId, category_id:cat, amount:signedAmount, type:state.txType,
+    method_id: method, note, status:state.selectedStatus, recurring:state.selectedRecurring||null,
     created_by: currentUser.id,
   };
 
   let error;
   showLoading(true);
+
   if(state.editingTxId){
+    const payload = {...basePayload, description:desc, occurred_on: dateVal};
     ({ error } = await sb.from('transactions').update(payload).eq('id', state.editingTxId));
   } else {
-    ({ error } = await sb.from('transactions').insert(payload));
+    const repeatFreq = state.selectedRepeatFreq;
+    const repeatCount = parseInt(document.getElementById('tx-repeat-count').value) || 0;
+    if(repeatFreq && repeatCount >= 2){
+      const groupId = crypto.randomUUID();
+      const dates = computeOccurrenceDates(dateVal, repeatFreq, repeatCount);
+      const rows = dates.map((d, i) => ({
+        ...basePayload,
+        description: `${desc} (${i+1}/${repeatCount})`,
+        occurred_on: d,
+        installment_group: groupId,
+      }));
+      ({ error } = await sb.from('transactions').insert(rows));
+    } else {
+      ({ error } = await sb.from('transactions').insert({...basePayload, description:desc, occurred_on: dateVal}));
+    }
   }
   if(error){ showLoading(false); showToast('Erro: '+error.message); return; }
   state.editingTxId = null;
@@ -1893,7 +1962,7 @@ function renderAccountsFull(){
     return;
   }
   ws.paymentMethods.forEach(m=>{
-    const spent = ws.transactions.filter(t=>t.method===m.id && t.amount<0).reduce((s,t)=>s+Math.abs(t.amount),0);
+    const spent = ws.transactions.filter(t=>t.method===m.id && t.amount<0 && (t.status||'Pago')==='Pago').reduce((s,t)=>s+Math.abs(t.amount),0);
     el.innerHTML += `
       <div class="method-card" onclick="showToast('Edição de meio de pagamento — em breve')">
         <div class="chip-icon" style="background:${m.color}22">${m.icon}</div>
@@ -2315,6 +2384,7 @@ function openEditTx(wsId, id){
   if(t.method) document.getElementById('tx-account').value = t.method;
   renderStatusPicker('tx-status-row', 'selectedStatus');
   renderRecurringRow();
+  document.getElementById('tx-repeat-section').style.display = 'none';
   document.getElementById('add-title').textContent = 'Editar transação';
   goTo('add');
 }

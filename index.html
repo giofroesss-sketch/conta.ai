@@ -73,7 +73,7 @@ body{
     box-shadow:none;
   }
   .statusbar{ display:none; }
-  .screen{ padding-top:env(safe-area-inset-top); }
+  .screen{ padding-top: calc(env(safe-area-inset-top, 0px) + 20px); }
   .bottomnav{ padding-bottom:max(22px, env(safe-area-inset-bottom)); }
 }
 .screen{
@@ -531,7 +531,7 @@ body.privacy-on .amt:active{
 <div class="auth-loading" id="auth-loading">Carregando...</div>
 
 <div class="auth-screen" id="auth-screen">
-  <div class="auth-logo">Conta.ai</div>
+  <div class="auth-logo" style="display:flex; align-items:center; gap:10px;"><img src="icon-192.png" alt="" style="width:34px; height:34px; border-radius:9px;">Conta.ai</div>
   <div class="auth-sub" id="auth-subtitle">Entre para acessar suas áreas financeiras.</div>
   <div class="auth-error" id="auth-error"></div>
 
@@ -562,7 +562,7 @@ body.privacy-on .amt:active{
 
   <!-- ============ SCREEN: WORKSPACES ============ -->
   <div class="screen active" id="screen-workspaces">
-    <div class="eyebrow">Conta.ai</div>
+    <div class="eyebrow" style="display:flex; align-items:center; gap:6px;"><img src="icon-192.png" alt="" style="width:16px; height:16px; border-radius:4px;">Conta.ai</div>
     <h1 class="page-title">Suas áreas</h1>
     <p class="sub">Escolha um espaço para ver saldo, contas e despesas.</p>
     <div class="ws-scroll" id="ws-scroll"></div>
@@ -842,7 +842,7 @@ body.privacy-on .amt:active{
   </div>
 
   <div class="screen" id="screen-settings">
-    <div class="eyebrow">Conta.ai</div>
+    <div class="eyebrow" style="display:flex; align-items:center; gap:6px;"><img src="icon-192.png" alt="" style="width:16px; height:16px; border-radius:4px;">Conta.ai</div>
     <h1 class="page-title">Configurações</h1>
     <div class="section-head"><h3>Áreas de trabalho</h3></div>
     <div id="settings-ws-list"></div>

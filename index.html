@@ -1319,8 +1319,9 @@ async function saveEditWs(){
   const ws = state.workspaces[state.editWsId];
   const name = document.getElementById('editws-name').value.trim();
   if(!name){ showToast('Dê um nome para a área'); return; }
-  const { error } = await sb.from('workspaces').update({name, icon:state.editWsIcon, color:state.editWsColor}).eq('id', ws.id);
+  const { data, error } = await sb.from('workspaces').update({name, icon:state.editWsIcon, color:state.editWsColor}).eq('id', ws.id).select();
   if(error){ showToast('Erro: '+error.message); return; }
+  if(!data || data.length === 0){ showToast('Não foi possível salvar — você pode não ter permissão para editar esta área.'); return; }
   ws.name = name; ws.icon = state.editWsIcon; ws.color = state.editWsColor;
   showToast('Área atualizada ✓');
   goTo('settings');
@@ -1330,8 +1331,9 @@ async function confirmDeleteWs(id){
   const ws = state.workspaces[wsId];
   if(Object.keys(state.workspaces).length <= 1){ showToast('Você precisa ter pelo menos uma área'); return; }
   if(!confirm(`Excluir a área "${ws.name}"? Essa ação não pode ser desfeita.`)) return;
-  const { error } = await sb.from('workspaces').delete().eq('id', wsId);
-  if(error){ showToast('Só o dono da área pode excluí-la, ou: '+error.message); return; }
+  const { data, error } = await sb.from('workspaces').delete().eq('id', wsId).select();
+  if(error){ showToast('Erro: '+error.message); return; }
+  if(!data || data.length === 0){ showToast('Não foi possível excluir — só quem criou a área pode excluí-la.'); return; }
   delete state.workspaces[wsId];
   if(state.activeWsId === wsId) state.activeWsId = Object.keys(state.workspaces)[0];
   showToast('Área excluída');

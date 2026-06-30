@@ -603,8 +603,8 @@ body.privacy-on .amt:active{
       <div id="income-banner-slot"></div>
 
       <div class="stat-row">
-        <div class="stat-box income"><div class="lbl">Receitas (mês)</div><div class="amt" id="ind-income">R$ 0</div></div>
-        <div class="stat-box expense"><div class="lbl">Despesas (mês)</div><div class="amt" id="ind-expense">R$ 0</div></div>
+        <div class="stat-box income" onclick="openTxHistoryFiltered('income')" style="cursor:pointer;"><div class="lbl">Receitas (mês)</div><div class="amt" id="ind-income">R$ 0</div></div>
+        <div class="stat-box expense" onclick="openTxHistoryFiltered('expense')" style="cursor:pointer;"><div class="lbl">Despesas (mês)</div><div class="amt" id="ind-expense">R$ 0</div></div>
       </div>
 
       <div class="section-head"><h3>Receitas x despesas</h3><a onclick="goTo('reports')">relatório</a></div>
@@ -617,7 +617,7 @@ body.privacy-on .amt:active{
       <div class="section-head"><h3>🐷 Caixinhas</h3><a onclick="openNewJar()">+ nova</a></div>
       <div class="method-chip-row" id="jars-preview"></div>
 
-      <div class="section-head"><h3>Últimas transações</h3><a onclick="goTo('txHistory')">ver tudo</a></div>
+      <div class="section-head"><h3>Últimas transações</h3><a onclick="state.txHistoryFilter=null; goTo('txHistory')">ver tudo</a></div>
       <div id="dash-transactions"></div>
 
       <div class="section-head"><h3>Categorias do mês</h3><a onclick="goTo('categories')">ver tudo</a></div>
@@ -766,10 +766,19 @@ body.privacy-on .amt:active{
 
   <!-- ============ SCREEN: HISTÓRICO DE TRANSAÇÕES (individual) ============ -->
   <div class="screen" id="screen-txHistory">
-    <div class="header-row"><div class="back-btn" onclick="goTo('dashboard')">←</div><h2>Histórico completo</h2></div>
+    <div class="header-row"><div class="back-btn" onclick="goTo('dashboard')">←</div><h2 id="txhistory-title">Histórico completo</h2></div>
+    <div id="txhistory-filter-chip"></div>
     <div class="field"><input type="text" id="txhistory-search" placeholder="Buscar por descrição..." oninput="renderTxHistory()"></div>
     <p class="sub" id="txhistory-summary"></p>
     <div id="txhistory-list"></div>
+  </div>
+
+  <!-- ============ SCREEN: DETALHE DE MEIO DE PAGAMENTO ============ -->
+  <div class="screen" id="screen-methoddetail">
+    <div class="header-row"><div class="back-btn" onclick="goTo('accounts')">←</div><h2>Meio de pagamento</h2></div>
+    <div class="cat-detail-head" id="methoddetail-head"></div>
+    <div class="section-head"><h3>Movimentações</h3></div>
+    <div id="methoddetail-list"></div>
   </div>
 
   <!-- ============ SCREEN: NEW WORKSPACE ============ -->
@@ -982,6 +991,7 @@ let state = {
   newJarIcon: '🐷',
   newJarColor: '#16A893',
   activeJarId: null,
+  txHistoryFilter: null,
   jarEntryMode: 'add',
   editWsId: null, editWsIcon: ICONS[0], editWsColor: COLORS[0],
   editingTxId: null, editingExpenseId: null,
@@ -1592,7 +1602,7 @@ function renderAccountsPreview(ws){
   ws.paymentMethods.forEach(m=>{
     const spent = ws.transactions.filter(t=>t.method===m.id && t.amount<0 && (t.status||'Pago')==='Pago').reduce((s,t)=>s+Math.abs(t.amount),0);
     el.innerHTML += `
-      <div class="method-chip" onclick="goTo('accounts')">
+      <div class="method-chip" onclick="openMethodDetail('${m.id}')">
         <span class="ic" style="background:${m.color}22">${m.icon}</span>
         ${m.name} · ${fmtShort(spent)}
       </div>`;
@@ -2053,7 +2063,7 @@ function renderAccountsFull(){
   ws.paymentMethods.forEach(m=>{
     const spent = ws.transactions.filter(t=>t.method===m.id && t.amount<0 && (t.status||'Pago')==='Pago').reduce((s,t)=>s+Math.abs(t.amount),0);
     el.innerHTML += `
-      <div class="method-card" onclick="showToast('Edição de meio de pagamento — em breve')">
+      <div class="method-card" onclick="openMethodDetail('${m.id}')">
         <div class="chip-icon" style="background:${m.color}22">${m.icon}</div>
         <div class="meta"><div class="name">${m.name}</div><div class="spent">${fmtShort(spent)} gastos este mês</div></div>
         <div class="caret">›</div>
@@ -2325,14 +2335,62 @@ function renderGroupHistoryFull(){
   });
 }
 
+function openTxHistoryFiltered(type){
+  state.txHistoryFilter = { kind: 'type', value: type };
+  goTo('txHistory');
+}
+function openMethodDetail(methodId){
+  const ws = state.workspaces[state.activeWsId];
+  if(!ws){ showToast('Área não encontrada — atualizando lista...'); loadMyWorkspaces(); return; }
+  const method = ws.paymentMethods.find(m=>m.id===methodId);
+  if(!method) return;
+  const items = ws.transactions.filter(t=>t.method===methodId);
+  const spent = items.filter(t=>t.amount<0).reduce((s,t)=>s+Math.abs(t.amount),0);
+  const received = items.filter(t=>t.amount>0).reduce((s,t)=>s+t.amount,0);
+  const head = document.getElementById('methoddetail-head');
+  head.style.background = `linear-gradient(135deg, ${method.color}, ${shade(method.color)})`;
+  head.innerHTML = `
+    <div class="nm">${method.icon} ${method.name}</div>
+    <div class="sub">${items.length} movimentação(ões)</div>
+    <div class="big">${fmt(received - spent)}</div>
+  `;
+  const list = document.getElementById('methoddetail-list');
+  list.innerHTML = '';
+  if(items.length === 0){
+    list.innerHTML = `<div class="empty-state"><div class="ico">💳</div><div class="t">Nenhuma movimentação ainda</div><div class="d">Lançamentos com esse meio de pagamento aparecem aqui.</div></div>`;
+  } else {
+    items.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')).forEach(t=>{
+      list.innerHTML += transactionRowHTML(ws.id, t);
+    });
+  }
+  goTo('methoddetail');
+}
+function clearTxHistoryFilter(){
+  state.txHistoryFilter = null;
+  renderTxHistory();
+}
 function renderTxHistory(){
   const ws = state.workspaces[state.activeWsId];
   if(!ws){ showToast('Área não encontrada — atualizando lista...'); loadMyWorkspaces(); return; }
   const search = (document.getElementById('txhistory-search').value || '').toLowerCase();
-  const list = ws.transactions
-    .filter(t => !search || t.desc.toLowerCase().includes(search))
-    .slice()
-    .sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  const filter = state.txHistoryFilter;
+
+  const chipEl = document.getElementById('txhistory-filter-chip');
+  const titleEl = document.getElementById('txhistory-title');
+  if(filter && filter.kind === 'type'){
+    titleEl.textContent = filter.value === 'income' ? 'Receitas' : 'Despesas';
+    chipEl.innerHTML = `<div class="payer-chip selected" style="margin-bottom:14px; display:inline-flex;" onclick="clearTxHistoryFilter()">Filtro: ${filter.value==='income'?'Receitas':'Despesas'} ✕</div>`;
+  } else {
+    titleEl.textContent = 'Histórico completo';
+    chipEl.innerHTML = '';
+  }
+
+  let list = ws.transactions.slice();
+  if(filter && filter.kind === 'type'){
+    list = list.filter(t => filter.value === 'income' ? t.amount > 0 : t.amount < 0);
+  }
+  list = list.filter(t => !search || t.desc.toLowerCase().includes(search));
+  list.sort((a,b) => (b.date||'').localeCompare(a.date||''));
 
   const totalIncome = list.filter(t=>t.amount>0).reduce((s,t)=>s+t.amount,0);
   const totalExpense = list.filter(t=>t.amount<0).reduce((s,t)=>s+Math.abs(t.amount),0);

@@ -865,7 +865,7 @@ body.privacy-on .amt:active{
   <!-- ============ SCREEN: NOVA CAIXINHA ============ -->
   <div class="screen" id="screen-newjar">
     <div class="header-row"><div class="back-btn" onclick="goTo('dashboard')">←</div><h2>Nova caixinha</h2></div>
-    <p class="sub">Separe visualmente quanto você está guardando ou investindo — sem afetar seu saldo disponível.</p>
+    <p class="sub">Funciona como uma transferência: o valor guardado sai do seu saldo disponível, como se fosse para outra conta.</p>
     <div class="field"><label>Nome</label><input type="text" id="newjar-name" placeholder="Ex: Investimentos, Reserva, Viagem..."></div>
     <label style="font-size:12px; font-weight:600; color:var(--muted); display:block; margin-bottom:8px;">Ícone</label>
     <div class="icon-swatches" id="newjar-icons"></div>
@@ -2161,6 +2161,16 @@ function openJarEntry(mode){
   document.getElementById('jarentry-date').value = new Date().toISOString().slice(0,10);
   goTo('jarentry');
 }
+async function getOrCreateJarCategory(ws){
+  let cat = ws.categories.find(c => c.name === 'Caixinha');
+  if(cat) return cat.id;
+  const { data, error } = await sb.from('categories').insert({
+    workspace_id: ws.id, name:'Caixinha', icon:'🐷', color:'#16A893'
+  }).select().single();
+  if(error || !data) return null;
+  ws.categories.push(data);
+  return data.id;
+}
 async function saveJarEntry(){
   const ws = state.workspaces[state.activeWsId];
   const jar = ws.jars.find(j=>j.id===state.activeJarId);
@@ -2170,11 +2180,32 @@ async function saveJarEntry(){
   const note = document.getElementById('jarentry-note').value || '';
   const date = document.getElementById('jarentry-date').value || new Date().toISOString().slice(0,10);
   const amount = state.jarEntryMode === 'add' ? Math.abs(amountRaw) : -Math.abs(amountRaw);
+
   const { data, error } = await sb.from('jar_entries').insert({
     jar_id: jar.id, workspace_id: ws.id, amount, note, occurred_on: date, created_by: currentUser.id
   }).select().single();
   if(error){ showToast('Erro: '+error.message); return; }
   jar.entries.unshift({id:data.id, amount:Number(data.amount), note:data.note||'', date:data.occurred_on});
+
+  // cria também uma transação real, que afeta o saldo disponível (como uma transferência)
+  const categoryId = await getOrCreateJarCategory(ws);
+  const txDesc = state.jarEntryMode === 'add'
+    ? `Transferência para ${jar.icon} ${jar.name}`
+    : `Resgate de ${jar.icon} ${jar.name}`;
+  const txAmount = state.jarEntryMode === 'add' ? -Math.abs(amountRaw) : Math.abs(amountRaw);
+  const { data: txData, error: txError } = await sb.from('transactions').insert({
+    workspace_id: ws.id, description: txDesc, category_id: categoryId, amount: txAmount,
+    type: txAmount>0 ? 'income' : 'expense', occurred_on: date, note, status:'Pago',
+    created_by: currentUser.id,
+  }).select().single();
+  if(!txError && txData){
+    ws.transactions.unshift({
+      id:txData.id, desc:txData.description, cat:txData.category_id, amount:Number(txData.amount),
+      type:txData.type, date:txData.occurred_on, method:null, note:txData.note||'', status:txData.status,
+      recurring:null,
+    });
+  }
+
   showToast(state.jarEntryMode==='add' ? 'Valor guardado ✓' : 'Valor resgatado ✓');
   openJarDetail(jar.id);
 }

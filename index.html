@@ -571,9 +571,12 @@ body.privacy-on .amt:active{
 
     <div class="section-head"><h3>Resumo geral</h3></div>
     <div class="stat-row">
-      <div class="stat-box income"><div class="lbl">Você recebe</div><div class="amt" id="overview-get">R$ 0</div></div>
-      <div class="stat-box expense"><div class="lbl">Você deve</div><div class="amt" id="overview-owe">R$ 0</div></div>
+      <div class="stat-box income" onclick="openGroupBalances('recebe')" style="cursor:pointer;"><div class="lbl">Você recebe</div><div class="amt" id="overview-get">R$ 0</div></div>
+      <div class="stat-box expense" onclick="openGroupBalances('deve')" style="cursor:pointer;"><div class="lbl">Você deve</div><div class="amt" id="overview-owe">R$ 0</div></div>
     </div>
+
+    <div class="section-head"><h3>⏰ Próximos pagamentos</h3><a onclick="goTo('upcoming')">ver tudo</a></div>
+    <div id="upcoming-preview"></div>
 
     <div class="section-head"><h3>Atividade recente</h3><a onclick="alert('Histórico completo — em breve')">ver tudo</a></div>
     <div id="recent-activity"></div>
@@ -603,8 +606,8 @@ body.privacy-on .amt:active{
       <div id="income-banner-slot"></div>
 
       <div class="stat-row">
-        <div class="stat-box income" onclick="openTxHistoryFiltered('income')" style="cursor:pointer;"><div class="lbl">Receitas (mês)</div><div class="amt" id="ind-income">R$ 0</div></div>
-        <div class="stat-box expense" onclick="openTxHistoryFiltered('expense')" style="cursor:pointer;"><div class="lbl">Despesas (mês)</div><div class="amt" id="ind-expense">R$ 0</div></div>
+        <div class="stat-box income" onclick="openTxHistoryFiltered('income')" style="cursor:pointer;"><div class="lbl">Receitas (30 dias)</div><div class="amt" id="ind-income">R$ 0</div></div>
+        <div class="stat-box expense" onclick="openTxHistoryFiltered('expense')" style="cursor:pointer;"><div class="lbl">Despesas (30 dias)</div><div class="amt" id="ind-expense">R$ 0</div></div>
       </div>
 
       <div class="section-head"><h3>Receitas x despesas</h3><a onclick="goTo('reports')">relatório</a></div>
@@ -620,7 +623,7 @@ body.privacy-on .amt:active{
       <div class="section-head"><h3>Últimas transações</h3><a onclick="state.txHistoryFilter=null; goTo('txHistory')">ver tudo</a></div>
       <div id="dash-transactions"></div>
 
-      <div class="section-head"><h3>Categorias do mês</h3><a onclick="goTo('categories')">ver tudo</a></div>
+      <div class="section-head"><h3>Categorias (30 dias)</h3><a onclick="goTo('categories')">ver tudo</a></div>
       <div class="cat-grid" id="cat-grid"></div>
     </div>
 
@@ -762,6 +765,30 @@ body.privacy-on .amt:active{
   <div class="screen" id="screen-groupHistory">
     <div class="header-row"><div class="back-btn" onclick="goTo('dashboard')">←</div><h2>Histórico do grupo</h2></div>
     <div id="group-history-full"></div>
+  </div>
+
+  <!-- ============ SCREEN: PRÓXIMOS PAGAMENTOS ============ -->
+  <div class="screen" id="screen-upcoming">
+    <div class="header-row"><div class="back-btn" onclick="goTo('workspaces')">←</div><h2>Próximos pagamentos</h2></div>
+    <p class="sub">Lançamentos com status "A pagar", "Aguardando" ou "Pendente" em todos os seus espaços.</p>
+    <div class="toggle-row" id="upcoming-filter-row" style="margin-bottom:16px;">
+      <div class="opt active" data-val="all">Todos</div>
+      <div class="opt" data-val="a_pagar">A pagar</div>
+      <div class="opt" data-val="aguardando">Aguardando</div>
+      <div class="opt" data-val="pendente">Pendente</div>
+    </div>
+    <div id="upcoming-list"></div>
+  </div>
+
+  <!-- ============ SCREEN: VISÃO DE SALDOS (grupo) ============ -->
+  <div class="screen" id="screen-groupbalances">
+    <div class="header-row"><div class="back-btn" onclick="goTo('workspaces')">←</div><h2 id="groupbalances-title">Saldos</h2></div>
+    <div class="toggle-row" id="groupbalances-view-row" style="margin-bottom:16px;">
+      <div class="opt active" data-val="list">Lista</div>
+      <div class="opt" data-val="calendar">Calendário</div>
+      <div class="opt" data-val="kanban">Kanban</div>
+    </div>
+    <div id="groupbalances-content"></div>
   </div>
 
   <!-- ============ SCREEN: HISTÓRICO DE TRANSAÇÕES (individual) ============ -->
@@ -992,6 +1019,9 @@ let state = {
   newJarColor: '#16A893',
   activeJarId: null,
   txHistoryFilter: null,
+  upcomingFilter: 'all',
+  groupBalancesType: 'recebe',
+  groupBalancesView: 'list',
   jarEntryMode: 'add',
   editWsId: null, editWsIcon: ICONS[0], editWsColor: COLORS[0],
   editingTxId: null, editingExpenseId: null,
@@ -1399,6 +1429,8 @@ function goTo(screen){
   if(screen==='settings') renderSettings();
   if(screen==='groupHistory') renderGroupHistoryFull();
   if(screen==='txHistory') renderTxHistory();
+  if(screen==='upcoming'){ state.upcomingFilter='all'; renderUpcoming(); }
+  if(screen==='groupbalances') renderGroupBalances();
   if(screen==='newws') resetNewWsForm();
   if(screen==='calendar') renderCalendar();
 }
@@ -1427,10 +1459,15 @@ function openSettle(){
    CÁLCULOS DERIVADOS (lidos do cache local já carregado do banco)
    ============================================================ */
 function wsBalance(ws){ return ws.transactions.filter(t=>(t.status||'Pago')==='Pago').reduce((s,t)=>s+t.amount, 0); }
-function categorySpend(ws, monthOnly){
-  const now = new Date(); const ym = now.toISOString().slice(0,7);
+function last30Days(){
+  const d = new Date();
+  d.setDate(d.getDate() - 30);
+  return d.toISOString().slice(0,10);
+}
+function categorySpend(ws, last30Only){
+  const cutoff = last30Only ? last30Days() : null;
   const totals = {};
-  ws.transactions.filter(t=>t.amount<0 && (t.status||'Pago')==='Pago' && (!monthOnly || (t.date && t.date.slice(0,7)===ym))).forEach(t=>{
+  ws.transactions.filter(t=>t.amount<0 && (t.status||'Pago')==='Pago' && (!cutoff || (t.date && t.date >= cutoff))).forEach(t=>{
     totals[t.cat] = (totals[t.cat]||0) + Math.abs(t.amount);
   });
   return totals;
@@ -1503,6 +1540,7 @@ function renderWorkspaces(){
   });
   document.getElementById('overview-get').textContent = fmtShort(totalGet);
   document.getElementById('overview-owe').textContent = fmtShort(totalOwe);
+  renderUpcomingPreview();
 
   const activity = [];
   Object.values(state.workspaces).forEach(ws=>{
@@ -1555,9 +1593,9 @@ function renderDashboard(){
       <button onclick="state.txType='income'; resetTxForm(); document.getElementById('add-title').textContent='Nova transação'; goTo('add')">+ Receita</button>
       <button onclick="goTo('accounts')">Pagamento</button>
     `;
-    const now = new Date(); const ym = now.toISOString().slice(0,7);
+    const now = new Date(); const cutoff = last30Days();
     let monthIncome=0, monthExpense=0;
-    ws.transactions.forEach(t=>{ if((t.status||'Pago')==='Pago' && t.date && t.date.slice(0,7)===ym){ if(t.amount>0) monthIncome+=t.amount; else monthExpense+=Math.abs(t.amount); }});
+    ws.transactions.forEach(t=>{ if((t.status||'Pago')==='Pago' && t.date && t.date >= cutoff){ if(t.amount>0) monthIncome+=t.amount; else monthExpense+=Math.abs(t.amount); }});
     document.getElementById('ind-income').textContent = fmtShort(monthIncome);
     document.getElementById('ind-expense').textContent = fmtShort(monthExpense);
     renderBars('bars', computeBars(ws));
@@ -2847,6 +2885,135 @@ if('serviceWorker' in navigator){
 /* ============================================================
    INIT
    ============================================================ */
+/* ============================================================
+   PRÓXIMOS PAGAMENTOS
+   ============================================================ */
+function openGroupBalances(type){
+  state.groupBalancesType = type;
+  state.groupBalancesView = 'list';
+  goTo('groupbalances');
+}
+function renderGroupBalances(){
+  const type = state.groupBalancesType || 'recebe';
+  document.getElementById('groupbalances-title').textContent = type === 'recebe' ? 'Quem deve a você' : 'O que você deve';
+  const viewRow = document.getElementById('groupbalances-view-row');
+  viewRow.querySelectorAll('.opt').forEach(opt=>{
+    opt.classList.toggle('active', opt.dataset.val === (state.groupBalancesView||'list'));
+    opt.onclick = ()=>{ state.groupBalancesView = opt.dataset.val; renderGroupBalances(); };
+  });
+  const content = document.getElementById('groupbalances-content');
+  content.innerHTML = '';
+  const items = [];
+  Object.values(state.workspaces).filter(w=>w.type==='group').forEach(ws=>{
+    ws.members.filter(m=>m.id!==currentUser.id).forEach(m=>{
+      const net = memberNet(ws, m.id);
+      if(type==='recebe' && net>0) items.push({ws, m, net});
+      if(type==='deve' && net<0) items.push({ws, m, net:Math.abs(net)});
+    });
+  });
+  if(items.length === 0){
+    content.innerHTML = `<div class="empty-state"><div class="ico">${type==='recebe'?'🎉':'✅'}</div><div class="t">${type==='recebe'?'Ninguém te deve nada':'Você não deve nada'}</div><div class="d">Seus saldos nos grupos compartilhados.</div></div>`;
+    return;
+  }
+  if((state.groupBalancesView||'list') === 'list'){
+    items.forEach(({ws, m, net})=>{
+      content.innerHTML += `<div class="list-row">
+        <div class="avatar" style="background:${m.color}">${m.name[0]}</div>
+        <div class="meta"><div class="title">${m.name}</div><div class="desc">${ws.icon} ${ws.name}</div></div>
+        <div class="value" style="color:${type==='recebe'?'var(--teal)':'var(--coral)'}">${fmt(net)}</div>
+      </div>`;
+    });
+  } else if(state.groupBalancesView === 'kanban'){
+    const groups = {};
+    items.forEach(item=>{
+      const k = item.ws.name;
+      if(!groups[k]) groups[k] = [];
+      groups[k].push(item);
+    });
+    Object.entries(groups).forEach(([wsName, its])=>{
+      content.innerHTML += `<div style="background:var(--surface); border-radius:var(--radius-md); padding:14px; margin-bottom:12px; box-shadow:var(--shadow);">
+        <div style="font-weight:700; font-size:14px; margin-bottom:10px;">${wsName}</div>
+        ${its.map(({m,net})=>`<div class="member-row" style="margin-bottom:8px;">
+          <div class="avatar" style="background:${m.color}">${m.name[0]}</div>
+          <div class="meta"><div class="name">${m.name}</div></div>
+          <div class="amt ${type==='recebe'?'get':'owe'}">${fmt(net)}</div>
+        </div>`).join('')}
+      </div>`;
+    });
+  } else {
+    content.innerHTML = `<div class="empty-state"><div class="ico">📅</div><div class="t">Visão de calendário</div><div class="d">Disponível em breve para saldos de grupo.</div></div>`;
+  }
+}
+function renderUpcoming(){
+  const filter = state.upcomingFilter || 'all';
+  const filterRow = document.getElementById('upcoming-filter-row');
+  filterRow.querySelectorAll('.opt').forEach(opt=>{
+    opt.classList.toggle('active', opt.dataset.val === filter);
+    opt.onclick = ()=>{ state.upcomingFilter = opt.dataset.val; renderUpcoming(); };
+  });
+  const UPCOMING_STATUSES = ['A pagar','Aguardando','Pendente'];
+  const items = [];
+  Object.values(state.workspaces).forEach(ws=>{
+    if(ws.type==='individual'){
+      ws.transactions.filter(t=>t.amount<0 && UPCOMING_STATUSES.includes(t.status||'')).forEach(t=>{
+        if(filter==='all' || t.status.toLowerCase().replace(' ','_')===filter) {
+          items.push({wsId:ws.id, kind:'tx', id:t.id, wsName:ws.name, wsIcon:ws.icon, wsColor:ws.color, desc:t.desc, amount:t.amount, date:t.date, status:t.status});
+        }
+      });
+    }
+  });
+  items.sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const el = document.getElementById('upcoming-list');
+  el.innerHTML = '';
+  if(items.length===0){
+    el.innerHTML = `<div class="empty-state"><div class="ico">✅</div><div class="t">Nenhum pagamento pendente</div><div class="d">Quando você tiver contas a pagar, elas aparecem aqui.</div></div>`;
+    return;
+  }
+  items.forEach(item=>{
+    const s = statusOf(item.status);
+    el.innerHTML += `<div class="list-row" onclick="state.activeWsId='${item.wsId}'; openDetail('${item.wsId}','${item.kind}','${item.id}')">
+      <div class="chip-icon" style="background:${item.wsColor}22">${item.wsIcon}</div>
+      <div class="meta">
+        <div class="title">${item.desc}</div>
+        <div class="desc">${item.date||'Sem data'} · ${item.wsName} · <span style="color:${s.color}; font-weight:700;">${item.status}</span></div>
+      </div>
+      <div class="value" style="color:var(--coral)">${fmt(item.amount)}</div>
+    </div>`;
+  });
+}
+function renderUpcomingPreview(){
+  const UPCOMING_STATUSES = ['A pagar','Aguardando','Pendente'];
+  const items = [];
+  Object.values(state.workspaces).forEach(ws=>{
+    if(ws.type==='individual'){
+      ws.transactions.filter(t=>t.amount<0 && UPCOMING_STATUSES.includes(t.status||'')).forEach(t=>{
+        items.push({wsId:ws.id, kind:'tx', id:t.id, wsName:ws.name, wsIcon:ws.icon, wsColor:ws.color, desc:t.desc, amount:t.amount, date:t.date, status:t.status});
+      });
+    }
+  });
+  items.sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const el = document.getElementById('upcoming-preview');
+  if(!el) return;
+  el.innerHTML = '';
+  if(items.length===0){
+    el.innerHTML = `<p class="sub" style="margin:0 0 4px;">Nenhum pagamento pendente 🎉</p>`;
+    return;
+  }
+  items.slice(0,3).forEach(item=>{
+    const s = statusOf(item.status);
+    el.innerHTML += `<div class="list-row" onclick="state.activeWsId='${item.wsId}'; openDetail('${item.wsId}','${item.kind}','${item.id}')">
+      <div class="chip-icon" style="background:${item.wsColor}22">${item.wsIcon}</div>
+      <div class="meta">
+        <div class="title">${item.desc}</div>
+        <div class="desc" style="font-size:11px;">${item.date||'Sem data'} · ${item.wsName} · <span style="color:${s.color}; font-weight:700;">${item.status}</span></div>
+      </div>
+      <div class="value" style="color:var(--coral); font-size:13px;">${fmt(item.amount)}</div>
+    </div>`;
+  });
+  if(items.length>3){
+    el.innerHTML += `<p class="sub" style="text-align:center; margin-top:4px;">+${items.length-3} mais</p>`;
+  }
+}
 initApp();
 </script>
 </body>

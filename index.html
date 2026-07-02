@@ -64,19 +64,36 @@ body{
 
 /* Em celular de verdade (instalado ou no navegador), ocupa a tela inteira sem moldura */
 html, body{ max-width:100%; overflow-x:hidden; }
+* { box-sizing:border-box; max-width:100%; }
+img, video, canvas { max-width:100%; }
 @media (max-width: 600px){
   body{ padding:0; align-items:stretch; }
   .device{
-    width:100%;
-    max-width:100%;
+    width:100vw;
+    max-width:100vw;
     height:100vh;
     height:100dvh;
     border-radius:0;
     box-shadow:none;
+    overflow:hidden;
   }
   .statusbar{ display:none; }
-  .screen{ padding-top: calc(env(safe-area-inset-top, 0px) + 20px); }
+  .screen{
+    padding-top: calc(env(safe-area-inset-top, 0px) + 20px);
+    padding-left: 16px;
+    padding-right: 16px;
+    overflow-x: hidden;
+  }
   .bottomnav{ padding-bottom:max(22px, env(safe-area-inset-bottom)); }
+  .balance-card{ padding:18px 16px; }
+  .balance-actions{ gap:6px; }
+  .balance-actions button{ font-size:11px; padding:8px 6px; }
+  .ws-card{ min-width:130px; }
+  .modal-sheet{ padding:10px 16px 24px; }
+  .cat-pick-grid{ grid-template-columns:repeat(3,1fr); gap:8px; }
+  .stat-row{ gap:8px; }
+  h1.page-title{ font-size:22px; }
+  .balance-amount{ font-size:clamp(20px,6vw,30px); }
 }
 .screen{
   flex:1; overflow-y:auto; overflow-x:hidden; padding:6px 22px 100px;
@@ -553,6 +570,9 @@ body.privacy-on .amt:active{
   <button class="auth-btn" id="auth-submit-btn" onclick="submitAuth()">Entrar</button>
   <div class="auth-switch" id="auth-switch-text">
     Não tem conta? <b onclick="toggleAuthMode()">Cadastre-se</b>
+  </div>
+  <div class="auth-switch" id="auth-forgot" style="margin-top:8px; opacity:.75;">
+    Esqueceu a senha? <b onclick="sendPasswordReset()">Redefinir</b>
   </div>
 </div>
 
@@ -1090,12 +1110,27 @@ function hideAuthError(){ document.getElementById('auth-error').style.display = 
 function toggleAuthMode(){
   authMode = authMode === 'login' ? 'signup' : 'login';
   document.getElementById('auth-name-field').style.display = authMode === 'signup' ? 'block' : 'none';
+  document.getElementById('auth-forgot').style.display = authMode === 'signup' ? 'none' : 'block';
   document.getElementById('auth-submit-btn').textContent = authMode === 'signup' ? 'Criar conta' : 'Entrar';
   document.getElementById('auth-subtitle').textContent = authMode === 'signup' ? 'Crie sua conta para começar.' : 'Entre para acessar suas áreas financeiras.';
   document.getElementById('auth-switch-text').innerHTML = authMode === 'signup'
     ? 'Já tem conta? <b onclick="toggleAuthMode()">Entrar</b>'
     : 'Não tem conta? <b onclick="toggleAuthMode()">Cadastre-se</b>';
   hideAuthError();
+}
+async function sendPasswordReset(){
+  const email = document.getElementById('auth-email').value.trim();
+  if(!email){ showAuthError('Digite seu e-mail antes de redefinir a senha.'); return; }
+  showLoading(true);
+  const { error } = await sb.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin + window.location.pathname,
+  });
+  showLoading(false);
+  if(error){ showAuthError(translateAuthError(error.message)); return; }
+  hideAuthError();
+  document.getElementById('auth-error').style.display = 'block';
+  document.getElementById('auth-error').style.background = 'rgba(22,168,147,0.25)';
+  document.getElementById('auth-error').textContent = '✅ E-mail de redefinição enviado! Verifique sua caixa de entrada.';
 }
 
 function translateAuthError(msg){

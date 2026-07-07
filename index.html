@@ -79,11 +79,16 @@ img, video, canvas { max-width:100%; }
   }
   .statusbar{ display:none; }
   .screen{
-    padding-top: calc(env(safe-area-inset-top, 0px) + 20px);
+    padding-top: 8px;
     padding-left: 16px;
     padding-right: 16px;
     overflow-x: hidden;
   }
+  .topbar{
+    padding-top: env(safe-area-inset-top, 20px);
+    margin-top: 0;
+  }
+  h1.page-title{ padding-top: env(safe-area-inset-top, 16px); }
   .bottomnav{ padding-bottom:max(22px, env(safe-area-inset-bottom)); }
   .balance-card{ padding:18px 16px; }
   .balance-actions{ gap:6px; }
@@ -640,7 +645,7 @@ body.privacy-on .amt:active{
       <div class="section-head"><h3>🐷 Caixinhas</h3><a onclick="openNewJar()">+ nova</a></div>
       <div class="method-chip-row" id="jars-preview"></div>
 
-      <div class="section-head"><h3>Últimas transações</h3><a onclick="state.txHistoryFilter=null; goTo('txHistory')">ver tudo</a></div>
+      <div class="section-head"><h3>Últimos 7 dias</h3><a onclick="state.txHistoryFilter=null; goTo('txHistory')">histórico completo</a></div>
       <div id="dash-transactions"></div>
 
       <div class="section-head"><h3>Categorias (30 dias)</h3><a onclick="goTo('categories')">ver tudo</a></div>
@@ -826,6 +831,59 @@ body.privacy-on .amt:active{
     <div class="cat-detail-head" id="methoddetail-head"></div>
     <div class="section-head"><h3>Movimentações</h3></div>
     <div id="methoddetail-list"></div>
+  </div>
+
+  <!-- ============ SCREEN: PLANEJAMENTO ============ -->
+  <div class="screen" id="screen-planejamento">
+    <div class="header-row"><div class="back-btn" onclick="goTo('dashboard')">←</div><h2>Planejamento</h2></div>
+
+    <div class="toggle-row" id="plan-tabs" style="margin-bottom:16px;">
+      <div class="opt active" data-tab="mensal" onclick="switchPlanTab('mensal')">Mensal</div>
+      <div class="opt" data-tab="cartoes" onclick="switchPlanTab('cartoes')">Cartões</div>
+      <div class="opt" data-tab="alivio" onclick="switchPlanTab('alivio')">Alívio</div>
+    </div>
+
+    <!-- ABA: MENSAL -->
+    <div id="plan-mensal">
+      <div class="month-nav">
+        <span class="arrow" onclick="shiftPlanMonth(-1)">‹</span>
+        <span class="side" onclick="shiftPlanMonth(-1)" id="plan-prev-label"></span>
+        <span class="current" id="plan-current-label">Julho</span>
+        <span class="side" onclick="shiftPlanMonth(1)" id="plan-next-label"></span>
+        <span class="arrow" onclick="shiftPlanMonth(1)">›</span>
+      </div>
+
+      <div class="stat-row" style="margin-bottom:10px;">
+        <div class="stat-box income" style="cursor:default;"><div class="lbl">Receita prevista</div><div class="amt" id="plan-income" style="color:var(--teal)">R$ 0</div></div>
+        <div class="stat-box expense" style="cursor:default;"><div class="lbl">Despesa prevista</div><div class="amt" id="plan-expense" style="color:var(--coral)">R$ 0</div></div>
+      </div>
+      <div class="stat-box" style="background:var(--surface); border-radius:var(--radius-md); padding:14px; margin-bottom:16px; box-shadow:var(--shadow);">
+        <div class="lbl">Livre estimado</div>
+        <div class="amt" id="plan-free" style="color:var(--violet-1); font-size:22px; font-family:'Sora',sans-serif; font-weight:800;">R$ 0</div>
+        <div class="progress-track" style="margin-top:8px;"><div class="progress-fill" id="plan-progress" style="background:var(--coral);"></div></div>
+        <div style="font-size:11px; color:var(--muted); margin-top:4px;" id="plan-pct">0% comprometido da renda</div>
+      </div>
+
+      <div class="section-head"><h3>Contas do mês</h3></div>
+      <div id="plan-groups"></div>
+    </div>
+
+    <!-- ABA: CARTÕES -->
+    <div id="plan-cartoes" style="display:none;">
+      <div id="plan-cards-list"></div>
+    </div>
+
+    <!-- ABA: ALÍVIO -->
+    <div id="plan-alivio" style="display:none;">
+      <div class="stat-box" style="background:var(--surface); border-radius:var(--radius-md); padding:14px; margin-bottom:16px; box-shadow:var(--shadow);">
+        <div class="lbl">Total liberado nas próximas parcelas</div>
+        <div class="amt" id="plan-relief-total" style="color:var(--teal); font-family:'Sora',sans-serif; font-weight:800;">R$ 0</div>
+      </div>
+      <div class="section-head"><h3>Parcelas que acabam</h3></div>
+      <div id="plan-relief-list"></div>
+      <div class="section-head"><h3>Parcelas ativas</h3></div>
+      <div id="plan-active-list"></div>
+    </div>
   </div>
 
   <!-- ============ SCREEN: NEW WORKSPACE ============ -->
@@ -1042,6 +1100,9 @@ let state = {
   upcomingFilter: 'all',
   groupBalancesType: 'recebe',
   groupBalancesView: 'list',
+  planMonth: new Date().getMonth(),
+  planYear: new Date().getFullYear(),
+  planTab: 'mensal',
   jarEntryMode: 'add',
   editWsId: null, editWsIcon: ICONS[0], editWsColor: COLORS[0],
   editingTxId: null, editingExpenseId: null,
@@ -1468,6 +1529,7 @@ function goTo(screen){
   if(screen==='groupbalances') renderGroupBalances();
   if(screen==='newws') resetNewWsForm();
   if(screen==='calendar') renderCalendar();
+  if(screen==='planejamento') renderPlanejamento();
 }
 
 function openAdd(){
@@ -1627,6 +1689,7 @@ function renderDashboard(){
       <button onclick="openAdd()">+ Despesa</button>
       <button onclick="state.txType='income'; resetTxForm(); document.getElementById('add-title').textContent='Nova transação'; goTo('add')">+ Receita</button>
       <button onclick="goTo('accounts')">Pagamento</button>
+      <button onclick="goTo('planejamento')">📊 Planejar</button>
     `;
     const now = new Date(); const cutoff = last30Days();
     let monthIncome=0, monthExpense=0;
@@ -1707,11 +1770,14 @@ function renderDashTransactions(ws){
   const el = document.getElementById('dash-transactions');
   if(!el) return;
   el.innerHTML = '';
-  if(ws.transactions.length === 0){
-    el.innerHTML = `<div class="empty-state"><div class="ico">🧾</div><div class="t">Nenhuma transação ainda</div><div class="d">Toque no + para lançar a primeira.</div></div>`;
+  const cutoff7 = new Date(); cutoff7.setDate(cutoff7.getDate()-7);
+  const cutoff7str = cutoff7.toISOString().slice(0,10);
+  const recent = ws.transactions.filter(t=>(t.status||'Pago')==='Pago' && t.date && t.date >= cutoff7str);
+  if(recent.length === 0){
+    el.innerHTML = `<div class="empty-state"><div class="ico">🧾</div><div class="t">Nenhum gasto nos últimos 7 dias</div><div class="d">Transações pagas recentes aparecem aqui.</div></div>`;
     return;
   }
-  ws.transactions.slice(0,5).forEach(t=>{
+  recent.slice(0,5).forEach(t=>{
     el.innerHTML += transactionRowHTML(ws.id, t);
   });
 }
@@ -3049,6 +3115,208 @@ function renderUpcomingPreview(){
     el.innerHTML += `<p class="sub" style="text-align:center; margin-top:4px;">+${items.length-3} mais</p>`;
   }
 }
+/* ============================================================
+   PLANEJAMENTO
+   ============================================================ */
+function switchPlanTab(tab){
+  state.planTab = tab;
+  ['mensal','cartoes','alivio'].forEach(t=>{
+    document.getElementById('plan-'+t).style.display = t===tab?'block':'none';
+  });
+  document.querySelectorAll('#plan-tabs .opt').forEach(o=>{
+    o.classList.toggle('active', o.dataset.tab===tab);
+  });
+  renderPlanejamento();
+}
+function shiftPlanMonth(dir){
+  state.planMonth += dir;
+  if(state.planMonth > 11){ state.planMonth=0; state.planYear++; }
+  if(state.planMonth < 0){ state.planMonth=11; state.planYear--; }
+  renderPlanejamento();
+}
+function renderPlanejamento(){
+  const ws = state.workspaces[state.activeWsId];
+  if(!ws || ws.type!=='individual') return;
+  const ym = `${state.planYear}-${String(state.planMonth+1).padStart(2,'0')}`;
+  const prevIdx = state.planMonth===0?11:state.planMonth-1;
+  const nextIdx = state.planMonth===11?0:state.planMonth+1;
+  document.getElementById('plan-current-label').textContent = MONTH_NAMES[state.planMonth]+' '+state.planYear;
+  document.getElementById('plan-prev-label').textContent = MONTH_NAMES[prevIdx];
+  document.getElementById('plan-next-label').textContent = MONTH_NAMES[nextIdx];
+
+  const monthTxs = ws.transactions.filter(t=>t.date && t.date.slice(0,7)===ym);
+  const incomePreview = monthTxs.filter(t=>t.amount>0).reduce((s,t)=>s+t.amount,0);
+  const expensePreview = monthTxs.filter(t=>t.amount<0).reduce((s,t)=>s+Math.abs(t.amount),0);
+  const free = incomePreview - expensePreview;
+  const pct = incomePreview>0 ? Math.min(100, Math.round((expensePreview/incomePreview)*100)) : 0;
+
+  document.getElementById('plan-income').textContent = fmt(incomePreview);
+  document.getElementById('plan-expense').textContent = fmt(expensePreview);
+  document.getElementById('plan-free').textContent = fmt(free);
+  document.getElementById('plan-progress').style.width = pct+'%';
+  document.getElementById('plan-progress').style.background = pct>90?'var(--coral)':pct>70?'var(--gold)':'var(--teal)';
+  document.getElementById('plan-pct').textContent = pct+'% comprometido da renda';
+
+  if(state.planTab==='mensal') renderPlanGroups(ws, monthTxs);
+  if(state.planTab==='cartoes') renderPlanCartoes(ws, monthTxs);
+  if(state.planTab==='alivio') renderPlanAlivio(ws);
+}
+function renderPlanGroups(ws, monthTxs){
+  const el = document.getElementById('plan-groups');
+  el.innerHTML = '';
+  const expenses = monthTxs.filter(t=>t.amount<0);
+  if(expenses.length===0){
+    el.innerHTML = `<div class="empty-state"><div class="ico">📋</div><div class="t">Nenhuma conta neste mês</div><div class="d">Os lançamentos com status "A pagar" e "Aguardando" aparecerão aqui.</div></div>`;
+    return;
+  }
+
+  // Agrupar por método
+  const groups = {};
+  expenses.forEach(t=>{
+    const method = ws.paymentMethods.find(m=>m.id===t.method);
+    const key = method ? method.name : 'Outros / Pix';
+    const icon = method ? method.icon : '⚡';
+    const color = method ? method.color : '#766F8C';
+    if(!groups[key]) groups[key] = {icon, color, items:[], total:0};
+    groups[key].items.push(t);
+    groups[key].total += Math.abs(t.amount);
+  });
+
+  Object.entries(groups).forEach(([name, g])=>{
+    const id = 'pg_'+name.replace(/\s/g,'_');
+    const hasUnpaid = g.items.some(t=>t.status==='A pagar'||t.status==='Aguardando');
+    const badge = hasUnpaid ? `<span class="status-tag" style="background:var(--coral-soft);color:var(--coral);font-size:10px;">A pagar</span>` : `<span class="status-tag" style="background:var(--teal-soft);color:var(--teal);font-size:10px;">Pago</span>`;
+    el.innerHTML += `
+      <div class="list-row" style="flex-direction:column; align-items:stretch; margin-bottom:8px;" onclick="togglePlanGroup('${id}')">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <div class="chip-icon" style="background:${g.color}22">${g.icon}</div>
+            <div><div class="title">${name}</div><div class="desc">${g.items.length} item(s)</div></div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-family:'Sora',sans-serif; font-weight:700; font-size:14px; color:var(--coral);">${fmt(-g.total)}</div>
+            <div>${badge}</div>
+          </div>
+        </div>
+        <div id="${id}" style="display:none; margin-top:8px; border-top:1px solid var(--hairline); padding-top:8px;">
+          ${g.items.map(t=>{
+            const cat = ws.categories.find(c=>c.id===t.cat)||{icon:'🏷️',name:'Sem cat'};
+            return `<div style="display:flex; justify-content:space-between; padding:5px 0; font-size:12.5px;" onclick="event.stopPropagation(); openDetail('${ws.id}','tx','${t.id}')">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span style="width:6px; height:6px; border-radius:50%; background:${statusOf(t.status||'Pago').color}; display:inline-block; flex-shrink:0;"></span>
+                <span>${t.desc}</span>
+              </div>
+              <span style="color:var(--coral); font-weight:600;">${fmt(t.amount)}</span>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+  });
+}
+function togglePlanGroup(id){
+  const el = document.getElementById(id);
+  if(el) el.style.display = el.style.display==='none'?'block':'none';
+}
+function renderPlanCartoes(ws, monthTxs){
+  const el = document.getElementById('plan-cards-list');
+  el.innerHTML = '';
+  const cartoes = ws.paymentMethods.filter(m=>m.name.toLowerCase().includes('cartão')||m.name.toLowerCase().includes('master')||m.name.toLowerCase().includes('visa')||m.name.toLowerCase().includes('card'));
+  if(cartoes.length===0){
+    el.innerHTML = `<div class="empty-state"><div class="ico">💳</div><div class="t">Nenhum cartão cadastrado</div><div class="d">Adicione meios de pagamento com "Cartão" no nome.</div></div>`;
+    return;
+  }
+  cartoes.forEach(m=>{
+    const spent = monthTxs.filter(t=>t.method===m.id && t.amount<0).reduce((s,t)=>s+Math.abs(t.amount),0);
+    const limit = m.name.toLowerCase().includes('visa') ? 2300 : m.name.toLowerCase().includes('master') ? 600 : 1000;
+    const avail = limit - spent;
+    const pct = Math.min(100, Math.round((spent/limit)*100));
+    const color = pct>80?'var(--coral)':pct>60?'var(--gold)':'var(--teal)';
+    const items = monthTxs.filter(t=>t.method===m.id && t.amount<0);
+    el.innerHTML += `
+      <div class="account-card" style="background:linear-gradient(135deg,${m.color},${shade(m.color)}); margin-bottom:14px; border-radius:var(--radius-md); padding:16px; color:white;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+          <div><div style="font-size:14px; font-weight:700;">${m.icon} ${m.name}</div><div style="font-size:11px; opacity:.8;">Limite: ${fmt(limit)}</div></div>
+          <div style="text-align:right;"><div style="font-size:18px; font-weight:800;">${fmt(spent)}</div><div style="font-size:11px; opacity:.8;">usado</div></div>
+        </div>
+        <div style="height:6px; background:rgba(255,255,255,.3); border-radius:4px; overflow:hidden; margin-bottom:6px;">
+          <div style="height:100%; width:${pct}%; background:white; border-radius:4px;"></div>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:11px; opacity:.85;">
+          <span>${pct}% usado</span><span style="color:rgba(255,255,255,.95); font-weight:700;">${fmt(avail)} disponível</span>
+        </div>
+        ${items.length>0?`<div style="margin-top:10px; border-top:1px solid rgba(255,255,255,.2); padding-top:8px;">
+          ${items.slice(0,3).map(t=>`<div style="display:flex; justify-content:space-between; font-size:11.5px; padding:3px 0;">
+            <span style="opacity:.9;">${t.desc.replace(/\(\d+\/\d+\)/,'').trim()}</span>
+            <span style="font-weight:600;">${fmt(t.amount)}</span>
+          </div>`).join('')}
+          ${items.length>3?`<div style="font-size:10.5px; opacity:.7; margin-top:4px;">+${items.length-3} mais</div>`:''}
+        </div>`:''}
+      </div>`;
+  });
+}
+function renderPlanAlivio(ws){
+  const endingGroups = {};
+  let totalRelief = 0;
+  ws.transactions
+    .filter(t=>t.amount<0 && t.desc && t.desc.match(/\((\d+)\/(\d+)\)/))
+    .forEach(t=>{
+      const m = t.desc.match(/\((\d+)\/(\d+)\)/);
+      if(!m) return;
+      const cur=parseInt(m[1]), total=parseInt(m[2]);
+      const remaining = total-cur;
+      if(remaining<=0) return;
+      const baseName = t.desc.replace(/\s*\(\d+\/\d+\)/,'').trim();
+      if(!endingGroups[baseName]){
+        endingGroups[baseName]={amount:Math.abs(t.amount), remaining, total, cur, date:t.date};
+      }
+    });
+
+  const reliefByMonth = {};
+  Object.entries(endingGroups).forEach(([name, g])=>{
+    const endDate = new Date(g.date+'T00:00:00');
+    endDate.setMonth(endDate.getMonth() + g.remaining);
+    const key = `${endDate.getFullYear()}-${String(endDate.getMonth()+1).padStart(2,'0')}`;
+    const label = MONTH_NAMES[endDate.getMonth()]+' '+endDate.getFullYear();
+    if(!reliefByMonth[key]) reliefByMonth[key]={label, items:[], total:0};
+    reliefByMonth[key].items.push({name, amount:g.amount});
+    reliefByMonth[key].total += g.amount;
+    totalRelief += g.amount;
+  });
+
+  document.getElementById('plan-relief-total').textContent = fmt(totalRelief)+'/mês';
+
+  const reliefEl = document.getElementById('plan-relief-list');
+  reliefEl.innerHTML = '';
+  if(Object.keys(reliefByMonth).length===0){
+    reliefEl.innerHTML = `<div class="empty-state"><div class="ico">🎉</div><div class="t">Nenhuma parcela registrada</div><div class="d">Lance despesas com formato "(2/6)" para ver aqui.</div></div>`;
+  } else {
+    Object.entries(reliefByMonth).sort(([a],[b])=>a.localeCompare(b)).forEach(([,g])=>{
+      reliefEl.innerHTML += `<div class="list-row" style="flex-direction:column; align-items:stretch; margin-bottom:8px;">
+        <div style="display:flex; justify-content:space-between;">
+          <div><div class="title">${g.label}</div><div class="desc">${g.items.map(i=>i.name).join(', ')}</div></div>
+          <div style="font-family:'Sora',sans-serif; font-weight:700; color:var(--teal);">+${fmt(g.total)}</div>
+        </div>
+      </div>`;
+    });
+  }
+
+  const activeEl = document.getElementById('plan-active-list');
+  activeEl.innerHTML = '';
+  if(Object.keys(endingGroups).length===0){
+    activeEl.innerHTML = `<p class="sub" style="text-align:center;">Nenhuma parcela ativa encontrada.</p>`;
+  } else {
+    Object.entries(endingGroups).forEach(([name, g])=>{
+      activeEl.innerHTML += `<div class="list-row" style="flex-direction:column; align-items:stretch; margin-bottom:8px;">
+        <div style="display:flex; justify-content:space-between;">
+          <div><div class="title">${name}</div><div class="desc">${g.cur}/${g.total} — faltam ${g.remaining}x</div></div>
+          <div style="text-align:right;"><div style="font-family:'Sora',sans-serif; font-weight:700; color:var(--coral);">${fmt(-g.amount)}/mês</div></div>
+        </div>
+        <div class="progress-track" style="margin-top:8px;"><div class="progress-fill" style="width:${Math.round((g.cur/g.total)*100)}%; background:var(--violet-2);"></div></div>
+      </div>`;
+    });
+  }
+}
+
 initApp();
 </script>
 </body>
